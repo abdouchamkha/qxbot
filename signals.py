@@ -58,7 +58,7 @@ def symbol_index(names: list[tuple[str, str]]) -> dict[str, dict[bool, str]]:
 def _clean(line: str) -> str:
     line = unicodedata.normalize("NFKC", line).upper()
     # EUR/USD, EUR-USD, EUR_USD, EUR / USD -> EURUSD (not "-OTC")
-    return re.sub(r"\b([A-Z]{3})\s?[/\\\-_|.]\s?(?!OTC\b)([A-Z]{3})\b", r"\1\2", line)
+    return re.sub(r"\b([A-Z]{3})\s?[/\\\-_|.]\s?(?!OTC(?![A-Z]))([A-Z]{3})(?![A-Z])", r"\1\2", line)
 
 
 def _pair(line: str, index: dict | None) -> str | None:

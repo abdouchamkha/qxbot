@@ -6,3 +6,5 @@ __pycache__/
 trades.csv
 browser_profile/
 .pytest_cache/
+trades*.csv
+*.log

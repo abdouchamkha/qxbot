@@ -86,3 +86,13 @@ def test_unknown_pair_is_reported():
     unknown = []
     assert parse_signals("ABC/XYZ OTC 14:30 CALL\nEURUSD 14:31 PUT", TZ, NOW, NAMES, unknown=unknown)[0].asset == "EURUSD"
     assert unknown == ["ABC/XYZ OTC 14:30 CALL"]
+
+
+def test_slash_pair_with_underscore_otc_and_dash():
+    text = """توقيت المنصة 06:00+ ❤️
+مدة الصفقة 1 دقيقة ❤️
+
+❒ 𝚄𝚂𝙳/𝙱𝙳𝚃_𝙾𝚃𝙲 𝙼𝟷 — 𝙿𝚄𝚃 𝟷𝟶:𝟹𝟺✅.
+❒ 𝚄𝚂𝙳/𝙼𝚇𝙽_𝙾𝚃𝙲 𝙼𝟷 — 𝙱𝚄𝚈 𝟷𝟷:𝟺𝟷"""
+    names = NAMES + [("USDBDT_otc", "USD/BDT (OTC)"), ("USDMXN_otc", "USD/MXN (OTC)")]
+    assert parsed(text, names) == [("USDBDT_otc", "10:34", 60, "put"), ("USDMXN_otc", "11:41", 60, "call")]
