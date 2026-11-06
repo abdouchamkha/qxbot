@@ -1,0 +1,8 @@
+.venv/
+login_profile/
+session.json
+config.json
+__pycache__/
+trades.csv
+browser_profile/
+.pytest_cache/

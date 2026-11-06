@@ -1,0 +1,2 @@
+pyquotex @ https://github.com/cleitonleonel/pyquotex/archive/refs/heads/master.zip
+patchright
