@@ -12,12 +12,14 @@ import itertools
 import json
 import os
 import re
+import statistics
 import time
-import unicodedata
-from dataclasses import dataclass
+from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
+
+from signals import Signal, list_timezone, parse_signals
 
 HERE = Path(__file__).parent
 CONFIG_FILE = HERE / "config.json"
@@ -25,42 +27,6 @@ PROFILE_DIR = HERE / "login_profile"
 TRADES_FILE = HERE / "trades.csv"
 TRADE_FIELDS = ["time", "profile", "account", "signal", "asset", "direction", "level", "amount",
                 "entry", "delay_ms", "open_price", "result", "profit"]
-
-# one line = one signal; fields in any order: "M1 NZDJPY-OTC 00:03 PUT" or "NZDJPY-OTC,00:03 M1 PUT"
-SIGNAL_FIELDS = [re.compile(r"\bM(\d+)\b", re.I), re.compile(r"\b([A-Z]{6})(-OTC)?\b", re.I),
-                 re.compile(r"\b(\d{1,2}):(\d{2})\b"), re.compile(r"\b(CALL|PUT)\b", re.I)]
-
-
-@dataclass
-class Signal:
-    duration: int  # seconds
-    asset: str  # pyquotex name, e.g. NZDJPY_otc
-    at: datetime  # aware entry time
-    direction: str  # call | put
-
-
-# ---------------------------------------------------------------- parsing
-
-def parse_signals(text: str, tz: timezone, now: datetime) -> list[Signal]:
-    """Parse 'M1 NZDJPY-OTC 00:03 PUT' lines. Past times within 12h are dropped
-    (already happened today); older ones roll to tomorrow (list for next day)."""
-    out = []
-    for line in unicodedata.normalize("NFKC", text).splitlines():  # NFKC: fancy Telegram fonts -> ASCII
-        found = [r.search(line) for r in SIGNAL_FIELDS]
-        if not all(found):
-            continue
-        (mins,), (pair, otc), (hh, mm), (direction,) = (m.groups() for m in found)
-        if int(hh) > 23 or int(mm) > 59:
-            continue
-        at = now.astimezone(tz).replace(hour=int(hh), minute=int(mm), second=0, microsecond=0)
-        if at <= now:
-            if now - at < timedelta(hours=12):
-                continue
-            at += timedelta(days=1)
-        asset = pair.upper() + ("_otc" if otc else "")
-        out.append(Signal(int(mins) * 60, asset, at, direction.lower()))
-    return sorted(out, key=lambda s: s.at)
-
 
 def is_losing(direction: str, open_price: float, price: float) -> bool:
     """Equal price is a refund (draw) on Quotex, so not a loss."""
@@ -144,9 +110,11 @@ def print_stats(rows: list[dict], since: str) -> None:
     print("Wins by step: " + ", ".join(
         f"G{lv} {sum(r['result'] == 'win' for r in rows if r['level'] == lv)}/"
         f"{sum(r['level'] == lv for r in rows)}" for lv in levels))
-    delays = [int(r["delay_ms"]) for r in rows if r["entry"] == "open"]
-    if delays:
-        print(f"Entry delay at candle open: avg {sum(delays) / len(delays):+.0f}ms, max {max(delays):+d}ms")
+    for kind, label in (("pending", "pending orders (opened by Quotex)"), ("open", "direct orders")):
+        delays = [int(r["delay_ms"]) for r in rows if r["entry"] == kind]
+        if delays:
+            print(f"Entry vs candle open, {label}: avg {sum(delays) / len(delays):+.0f}ms, "
+                  f"worst {max(delays, key=abs):+d}ms ({len(delays)} trades)")
     print("Pairs:")
     for asset in sorted({r["asset"] for r in rows}, key=lambda a: -summarize([r for r in rows if r["asset"] == a])["net"]):
         m = summarize([r for r in rows if r["asset"] == asset])
@@ -163,7 +131,8 @@ def ask(prompt: str, default):
 DEFAULTS = {
     "email": "", "host": "quotex.com", "account": "PRACTICE", "amount": 1.0,
     "utc_offset": -3.0, "gales": 0, "gale_multiplier": 2.2, "proxy": "",
-    "headless": "n", "safe_pips": 0.0, "pre_entry_ms": 0, "overlap": "n", "min_payout": 80,
+    "headless": "n", "safe_pips": 0.0, "pre_entry_ms": "auto", "overlap": "n", "min_payout": 80,
+    "pending": "y", "stop_loss": 0.0, "take_profit": 0.0,
 }
 
 
@@ -194,8 +163,14 @@ def load_settings() -> dict:
             d["gale_multiplier"] = ask("Martingale multiplier", float(d["gale_multiplier"]))
         d["safe_pips"] = ask("Safe entry pips: wait up to half the candle for price to move this far "
                              "against the signal, else skip (0 = off)", float(d["safe_pips"]))
-        d["pre_entry_ms"] = ask("Pre-entry ms: send this early so the order reaches Quotex at :00, about half "
-                                "the ping the bot prints (0 = wait for the candle's first tick)", int(d["pre_entry_ms"]))
+        d["pending"] = ask("OTC entries as Quotex pending orders, opened by Quotex itself at exactly :00 "
+                           "(needs the signal > 70s ahead)? y/n", d["pending"])
+        d["pre_entry_ms"] = ask("Direct entries: send this many ms early so the order reaches Quotex at :00 "
+                                "(auto = half the measured ping, 0 = wait for the candle's first price)", str(d["pre_entry_ms"]))
+        if d["pre_entry_ms"] != "auto":
+            d["pre_entry_ms"] = int(d["pre_entry_ms"])
+        d["stop_loss"] = ask("Daily stop-loss $: stop trading today after losing this much (0 = off)", float(d["stop_loss"]))
+        d["take_profit"] = ask("Daily take-profit $: stop trading today after winning this much (0 = off)", float(d["take_profit"]))
         d["overlap"] = ask("Allow several trades in the same minute? y/n (n = first list signal only, "
                            "and a martingale gives way to a list signal)", d["overlap"])
         d["min_payout"] = ask("Minimum payout % (pairs paying less are skipped, 0 = trade all)", int(d["min_payout"]))
@@ -213,9 +188,10 @@ def load_settings() -> dict:
     profiles[name], saved["last"] = d, name
     CONFIG_FILE.write_text(json.dumps(saved, indent=2))
     CONFIG_FILE.chmod(0o600)  # may hold the password
-    print(f"Using profile '{name}': {d['email']} {d['account']} ${d['amount']} UTC{d['utc_offset']:+g} gales={d['gales']} safe_pips={d['safe_pips']:g} "
-          f"pre_entry={d['pre_entry_ms']}ms overlap={d['overlap']} "
-          f"min_payout={d['min_payout']}%")
+    print(f"Using profile '{name}': {d['email']} {d['account']} ${d['amount']} UTC{d['utc_offset']:+g} "
+          f"gales={d['gales']}x{d['gale_multiplier']:g} pending={d['pending']} pre_entry={d['pre_entry_ms']} "
+          f"overlap={d['overlap']} min_payout={d['min_payout']}% safe_pips={d['safe_pips']:g} "
+          f"stop_loss={d['stop_loss']:g} take_profit={d['take_profit']:g}")
     return d | {"password": password, "profile": name}
 
 
@@ -263,7 +239,7 @@ async def browser_session(cfg: dict) -> tuple[str, str]:
                 if "/trade" in page.url:
                     break
                 if await page.locator('input[name="code"]:visible').count():
-                    await page.fill('input[name="code"]:visible', input("Quotex PIN sent to your email: ").strip())
+                    await page.fill('input[name="code"]:visible', (await read_line("Quotex PIN sent to your email: ")).strip())
                     await page.press('input[name="code"]:visible', "Enter")
                 await page.wait_for_timeout(1000)
             else:
@@ -309,7 +285,42 @@ class Bot:
         self.chart = asyncio.Lock()
         self.taken: set[float] = set()
         self.reconnecting = asyncio.Lock()
-        self.ping = 0.5  # last measured order round trip, seconds  # candle starts that have a list signal
+        self.pings: deque[float] = deque(maxlen=20)  # order round trips, seconds
+        self.balance = 0.0
+        self.pending_lock = asyncio.Lock()  # Quotex's pending/create reply has no request id: one at a time
+        self.pending_reply: asyncio.Future | None = None
+        self.pending_opened: dict[str, asyncio.Future] = {}  # ticket -> open result
+        self.limit_said = False
+
+    @property
+    def ping(self) -> float:
+        return statistics.median(self.pings) if self.pings else 0.5
+
+    def pre_ms(self) -> int:
+        """Direct-entry head start: half the measured round trip when set to auto."""
+        v = self.cfg["pre_entry_ms"]
+        return int(min(600, max(50, self.ping * 500))) if v == "auto" else int(v)
+
+    def today_net(self) -> float:
+        today = datetime.now().date().isoformat()
+        return sum(float(r["profit"]) for r in self.my_trades() if r["time"].startswith(today))
+
+    def limit_reason(self, open_loss: float = 0.0) -> str | None:
+        """Daily stop-loss / take-profit on realised profit, minus a trade that is losing right now."""
+        net = self.today_net() - open_loss
+        if self.cfg["stop_loss"] and net <= -self.cfg["stop_loss"]:
+            return f"daily stop-loss reached (today {net:+.2f})"
+        if self.cfg["take_profit"] and net >= self.cfg["take_profit"]:
+            return f"daily take-profit reached (today {net:+.2f})"
+        return None
+
+    def can_trade(self, s: Signal, amount: float, open_loss: float = 0.0) -> bool:
+        reason = self.limit_reason(open_loss)
+        if reason is None and amount > self.balance:
+            reason = f"balance {self.balance:.2f} can't cover {amount:.2f}"
+        if reason:
+            print(f"  {s.at:%H:%M} {s.asset} {s.direction.upper()} skipped: {reason}")
+        return reason is None
 
     def schedule(self, signals: list[Signal]) -> list[Signal]:
         """Without overlap, keep only the first list signal per candle start."""
@@ -336,6 +347,7 @@ class Bot:
             except Exception:
                 pass
         token, cookies = await browser_session(self.cfg)
+        self.cookies = cookies
         b = Quotex(email=self.cfg["email"], password=self.cfg["password"], host=self.cfg["host"], lang="en",
                    proxies=self.cfg["proxy"] or None)
         # Cloudflare 403s the ws upgrade for browser UAs but allows the Quotex app UA
@@ -346,7 +358,8 @@ class Bot:
             raise RuntimeError(f"Websocket connect failed: {reason}")
         self.broker = b
         self._hook(b.api)
-        print(f"Connected. {self.cfg['account']} balance: {await b.get_balance()}")
+        self.balance = float(await b.get_balance() or 0)
+        print(f"Connected. {self.cfg['account']} balance: {self.balance}")
         await self.clock_check()
 
     async def clock_check(self, asset: str = "EURUSD_otc") -> None:
@@ -375,8 +388,12 @@ class Bot:
         set_event = api.event_registry.set_event
 
         async def capture(key, data=None):
+            if key == "pending_confirmed" and self.pending_reply and not self.pending_reply.done():
+                self.pending_reply.set_result(data if isinstance(data, dict) else {})
             if key == "buy_confirmed" and isinstance(data, dict):
-                fut = self.orders.pop(str(data.get("requestId")), None)
+                if "accountBalance" in data:
+                    self.balance = float(data["accountBalance"])
+                fut = self.pending_opened.pop(str(data.get("id")), None) or self.orders.pop(str(data.get("requestId")), None)
                 if not fut and not data.get("closePrice"):  # pyquotex also fires this for closed deals: skip those
                     fut = self.orders.pop(data.get("asset", ""), None)
                 if fut and not fut.done():
@@ -384,6 +401,27 @@ class Bot:
             return await set_event(key, data)
 
         api.event_registry.set_event = capture
+
+        # pyquotex drops "f_pending/opened" (a pending order that failed when it fired); catch it here.
+        on_message, failed = api._on_message, False
+
+        async def raw(msg):
+            nonlocal failed
+            text = msg.decode("utf-8", "ignore") if isinstance(msg, bytes) else str(msg)
+            if text.startswith('451-["f_pending/opened"'):
+                failed = True
+            elif failed:
+                failed = False
+                try:
+                    data = json.loads(text)
+                    fut = self.pending_opened.pop(str(data.get("ticket")), None)
+                    if fut and not fut.done():
+                        fut.set_result({"error": f"pending failed (code {data.get('error')})"})
+                except ValueError:
+                    pass
+            return await on_message(msg)
+
+        api._on_message = raw
 
     async def keepalive(self) -> None:
         """pyquotex already pings every 5s; this only rebuilds a dead session."""
@@ -443,8 +481,8 @@ class Bot:
             sent = time.time()
         try:
             data = await asyncio.wait_for(fut, 10)
-            self.ping = time.time() - sent
-            ping = self.ping * 1000
+            ping = (time.time() - sent) * 1000
+            self.pings.append(ping / 1000)
         except asyncio.TimeoutError:
             print(f"  {s.asset} order not confirmed (asset closed or amount invalid?)")
             return None
@@ -463,7 +501,7 @@ class Bot:
 
     def lead(self) -> float:
         """Seconds before the candle that the order step starts (chart switch + pre-entry)."""
-        return max(0.5, self.cfg["pre_entry_ms"] / 1000 + 0.3)
+        return max(0.5, self.pre_ms() / 1000 + 0.3)
 
     async def wait_entry(self, s: Signal, at: float, margin: float) -> bool:
         """Hold self.chart. Returns once it is time to send; False = skip this signal.
@@ -473,8 +511,8 @@ class Bot:
         opens on the last tick before :00 or the first after it (same expiry either way)."""
         if self.broker.api.current_asset != s.asset:
             await self.show(s, at)
-        if self.cfg["pre_entry_ms"] and not margin:
-            await sleep_until(at - self.cfg["pre_entry_ms"] / 1000)
+        if self.pre_ms() and not margin:
+            await sleep_until(at - self.pre_ms() / 1000)
             # Fast pair (new price more often than our ping): arriving at :00 opens within one tick of it.
             # Slow pair: the last price can be seconds old, so wait for the candle's first price instead;
             # the order then lands on that price (the candle's open) before the next one comes.
@@ -502,10 +540,50 @@ class Bot:
         price, open_price = self.price(s.asset), data.get("openPrice")
         return price is not None and open_price is not None and is_losing(s.direction, float(open_price), price)
 
+    async def place_pending(self, s: Signal, at: float, amount: float) -> dict | None:
+        """Quotex pending order by time: Quotex itself opens it at `at` (OTC only, >= 60s ahead).
+        Returns the opened order, {"error": ...} if Quotex refused or failed it, None if no answer."""
+        payload = {"openType": 0, "asset": s.asset, "timeframe": s.duration, "command": s.direction, "amount": amount,
+                   "openTime": datetime.fromtimestamp(at, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")}
+        async with self.pending_lock:
+            self.pending_reply = asyncio.get_running_loop().create_future()
+            sent = time.time()
+            await self.broker.api.send_websocket_request(f'42["pending/create",{json.dumps(payload)}]')
+            try:
+                reply = await asyncio.wait_for(self.pending_reply, 10)
+            except asyncio.TimeoutError:
+                return {"error": "no reply to pending/create"}
+            self.pings.append(time.time() - sent)
+        if "error" in reply:
+            return reply
+        ticket = str(reply.get("pending", {}).get("ticket"))
+        fut = self.pending_opened[ticket] = asyncio.get_running_loop().create_future()
+        print(f"  {s.asset} {s.direction.upper()} ${amount} pending order set for "
+              f"{datetime.fromtimestamp(at):%H:%M:%S} (Quotex opens it)")
+        await sleep_until(at - 3)
+        if reason := self.limit_reason():  # e.g. stop-loss hit by another trade meanwhile
+            await self.broker.api.send_websocket_request(f'42["pending/cancel",{json.dumps({"ticket": ticket})}]')
+            print(f"  {s.asset} pending order cancelled: {reason}")
+            return {"error": "cancelled", "cancelled": True}
+        try:
+            data = await asyncio.wait_for(fut, at + 15 - time.time())
+        except asyncio.TimeoutError:
+            return None
+        finally:
+            self.pending_opened.pop(ticket, None)
+        if "error" in data:
+            return data
+        data["delay_ms"] = round((data["openTimestamp"] + data.get("openMs", 0) / 1000 - at) * 1000)
+        print(f"  {s.asset} {s.direction.upper()} ${amount} opened {data['delay_ms']:+d}ms vs "
+              f"{datetime.fromtimestamp(at):%H:%M:%S} by Quotex (pending) open={data.get('openPrice')}")
+        return data
+
     async def run_signal(self, s: Signal) -> None:
         at, amount = s.at.timestamp(), self.cfg["amount"]
         signal = f"{s.at:%Y-%m-%d %H:%M} {s.asset} {s.direction}"
-        await sleep_until(at - 15)
+        use_pending = (self.cfg["pending"] == "y" and s.asset.endswith("_otc") and not self.cfg["safe_pips"]
+                       and at - time.time() > 70)
+        await sleep_until(at - (70 if use_pending else 15))
         if not await self.ensure_connected():
             print(f"  {s.at:%H:%M} {s.asset} skipped: not connected")
             return
@@ -520,20 +598,36 @@ class Bot:
         if payout is not None and payout < self.cfg["min_payout"]:
             print(f"  {s.at:%H:%M} {s.asset} {s.direction.upper()} skipped: payout {payout}% < {self.cfg['min_payout']}%")
             return
+        if not self.can_trade(s, amount):
+            return
         margin = self.cfg["safe_pips"] * pip(s.asset, info[4])
-        async with self.chart:
-            await self.show(s, at)
+        data, kind = None, "pending"
+        if use_pending:
+            data = await self.place_pending(s, at, amount)
+            if data and data.get("cancelled"):
+                return
+            if not data or "error" in data:
+                print(f"  {s.asset} pending order {'not confirmed' if data is None else data['error']}: "
+                      f"{'checking' if data is None else 'entering directly'}")
+                if data is None:  # no answer: don't risk a double entry
+                    return
+                data = None
+        if data is None:
+            async with self.chart:
+                await self.show(s, at)
         for level in range(self.cfg["gales"] + 1):
-            data = await self.place(s, at, amount, margin if level == 0 else 0.0)
+            if data is None:
+                data = await self.place(s, at, amount, margin if level == 0 else 0.0)
+                kind = "safe" if margin and not level else "open"
             if not data:
                 return
-            spawn(self.report(s, data, level, amount, signal, "safe" if margin and not level else "open"), f"result of {s.asset}")
+            spawn(self.report(s, data, level, amount, signal, kind), f"result of {s.asset}")
             if level == self.cfg["gales"]:
                 return
             end = at + s.duration
             await sleep_until(end - 5)
             if not self.gale_blocked(end):
-                async with self.chart:  # chart back on this pair: live price for the gale call, next candle ready
+                async with self.chart:  # chart on this pair: live price for the gale call, next candle ready
                     await self.show(s, end)
                 if self.losing(s, data):
                     print(f"  {s.asset} losing with 5s left, gale {level + 1} ready")
@@ -544,8 +638,10 @@ class Bot:
             if self.gale_blocked(end):
                 print(f"  gale on {s.asset} cancelled: a list signal has {datetime.fromtimestamp(end):%H:%M} (overlap off)")
                 return
-            at = end
-            amount = round(amount * self.cfg["gale_multiplier"], 2)
+            next_amount = round(amount * self.cfg["gale_multiplier"], 2)
+            if not self.can_trade(s, next_amount, open_loss=amount):
+                return
+            at, amount, data = end, next_amount, None
             print(f"  gale {level + 1} on {s.asset}: ${amount}")
 
     async def instrument(self, s: Signal) -> list | None:
@@ -566,6 +662,30 @@ class Bot:
             "delay_ms": data["delay_ms"], "open_price": data.get("openPrice"), "result": result, "profit": profit,
         })
         print("  " + stats_line("Session", [r for r in self.my_trades() if r["time"] >= self.started]))
+
+    async def quotex_history(self, day: str) -> list[dict]:
+        """Quotex's own trade history for one day (YYYY-MM-DD, UTC), as trades.csv-style rows."""
+        from curl_cffi.requests import AsyncSession
+
+        kind = "demo" if self.cfg["account"] == "PRACTICE" else "live"
+        proxies = {"http": self.cfg["proxy"], "https": self.cfg["proxy"]} if self.cfg["proxy"] else None
+        rows = []
+        async with AsyncSession(impersonate="chrome", proxies=proxies) as http:
+            for page in range(1, 50):
+                r = await http.get(f"https://{self.cfg['host']}/api/v1/cabinets/trades/history/type/{kind}"
+                                   f"?page={page}&dateFrom={day}&dateTo={day}",
+                                   headers={"Cookie": self.cookies, "Accept": "application/json"})
+                r.raise_for_status()
+                items = r.json().get("data") or []
+                for t in items:
+                    profit = float(t["profit"])
+                    rows.append({"time": datetime.fromtimestamp(t["open_time_timestamp"]).isoformat(timespec="seconds"),
+                                 "signal": t["ticket"], "asset": t["symbol"], "level": "0", "entry": "",
+                                 "amount": t["amount"], "profit": profit,
+                                 "result": "win" if profit > 0 else "loss" if profit < 0 else "draw"})
+                if len(items) < 10:
+                    break
+        return sorted(rows, key=lambda r: r["time"])
 
     def my_trades(self) -> list[dict]:
         return [r for r in read_trades() if r["profile"] == self.cfg["profile"] and r["account"] == self.cfg["account"]]
@@ -594,14 +714,55 @@ async def sleep_until(t: float) -> None:
         await asyncio.sleep(0.001)
 
 
-def read_list() -> str:
-    print("\nPaste the signal list, then an empty line (or type: stats):")
-    lines = []
-    while (line := input()).strip() or not lines:
-        if not lines and line.strip().lower() == "stats":
-            return "stats"
-        lines.append(line)
-    return "\n".join(lines)
+LINES: asyncio.Queue | None = None  # stdin lines, read by one background thread
+
+
+def start_stdin_reader() -> None:
+    global LINES
+    LINES = asyncio.Queue()
+    loop = asyncio.get_running_loop()
+
+    def pump():
+        while True:
+            try:
+                line = input()
+            except EOFError:
+                line = None
+            loop.call_soon_threadsafe(LINES.put_nowait, line)
+            if line is None:
+                return
+
+    import threading
+    threading.Thread(target=pump, daemon=True).start()
+
+
+async def read_line(prompt: str) -> str:
+    if LINES is None:
+        return await asyncio.to_thread(input, prompt)
+    print(prompt, end="", flush=True)
+    line = await LINES.get()
+    if line is None:
+        raise SystemExit("Input closed.")
+    return line
+
+
+async def read_list() -> str:
+    """A paste ends when no new line arrives for 0.6s after an empty line, so blank lines
+    inside a list (between signal blocks, after a header) don't cut it."""
+    print("\nPaste the signal list, then an empty line (or type: stats / history):")
+    lines: list[str] = []
+    while True:
+        wait = 0.6 if lines and not lines[-1].strip() else None
+        try:
+            line = await asyncio.wait_for(LINES.get(), wait)
+        except asyncio.TimeoutError:
+            return "\n".join(lines)
+        if line is None:
+            raise SystemExit("Input closed.")
+        if not lines and line.strip().lower() in ("stats", "history"):
+            return line.strip().lower()
+        if lines or line.strip():
+            lines.append(line)
 
 
 async def main() -> None:
@@ -609,14 +770,25 @@ async def main() -> None:
     patch_pyquotex(cfg["proxy"])
     tz = timezone(timedelta(hours=cfg["utc_offset"]))
     bot = Bot(cfg)
+    start_stdin_reader()
     await bot.connect()
     spawn(bot.keepalive(), "keepalive")
     while True:
-        text = await asyncio.to_thread(read_list)
+        text = await read_list()
         if text == "stats":
             print_stats(bot.my_trades(), bot.started)
             continue
-        signals = bot.schedule(parse_signals(text, tz, datetime.now(timezone.utc)))
+        if text == "history":  # Quotex's own records: every trade today, also ones made by hand
+            try:
+                rows = await bot.quotex_history(datetime.now(timezone.utc).date().isoformat())
+                print(stats_line("Quotex today", rows) if rows else "No trades on Quotex today.")
+            except Exception as e:
+                print(f"Could not load Quotex history: {e!r}")
+            continue
+        if list_tz := list_timezone(text):
+            print(f"  (times read as {list_tz}, written in the list)")
+        names = [(i[1], i[2]) for i in bot.broker.api.instruments]
+        signals = bot.schedule(parse_signals(text, tz, datetime.now(timezone.utc), names or None))
         if not signals:
             print("No upcoming signals found.")
             continue

@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from bot import is_losing, parse_signals
+from bot import is_losing, parse_signals  # parse_signals re-exported from signals.py
 
 TZ = timezone(timedelta(hours=-3))
 LIST = """M1 NZDJPY-OTC 00:00 PUT  ✅
@@ -89,3 +89,22 @@ def test_pip_from_decimals():
     from bot import pip
     assert pip("NZDCAD_otc", 5) == 0.0001 and pip("USDJPY_otc", 3) == 0.01 and abs(pip("XAGUSD_otc", 4) - 0.001) < 1e-12
     assert pip("USDJPY_otc") == 0.01
+
+
+def test_daily_limits_and_balance(monkeypatch):
+    import bot as botmod
+    from bot import Bot
+    today = datetime.now().date().isoformat()
+    rows = [{"time": f"{today}T10:00:00", "profile": "p", "account": "PRACTICE", "profit": "-4.0"},
+            {"time": "2020-01-01T10:00:00", "profile": "p", "account": "PRACTICE", "profit": "-50"}]
+    monkeypatch.setattr(botmod, "read_trades", lambda: rows)
+    b = Bot({"profile": "p", "account": "PRACTICE", "stop_loss": 5.0, "take_profit": 0.0, "pre_entry_ms": "auto"})
+    b.balance = 100
+    s = parse_signals("M1 EURUSD 23:59 CALL", TZ, datetime.now(TZ) - timedelta(days=1))[0]
+    assert b.today_net() == -4.0 and b.can_trade(s, 1)
+    assert not b.can_trade(s, 1, open_loss=1)  # losing gale step would reach -5
+    b.balance = 0.5
+    assert not b.can_trade(s, 1) and b.limit_reason() is None
+    assert b.pre_ms() == 250  # auto, no ping measured yet
+    b.pings.extend([0.4, 0.5, 0.6])
+    assert b.pre_ms() == 250 and Bot({"pre_entry_ms": 120}).pre_ms() == 120
