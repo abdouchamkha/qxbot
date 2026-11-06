@@ -80,3 +80,9 @@ GBPUSD 14:31 DOWN"""
 
 def test_garbage_gives_nothing():
     assert parsed("Hello! Join our VIP channel 🚀 profit 85% today, win rate 90%") == []
+
+
+def test_unknown_pair_is_reported():
+    unknown = []
+    assert parse_signals("ABC/XYZ OTC 14:30 CALL\nEURUSD 14:31 PUT", TZ, NOW, NAMES, unknown=unknown)[0].asset == "EURUSD"
+    assert unknown == ["ABC/XYZ OTC 14:30 CALL"]

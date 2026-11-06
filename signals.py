@@ -113,9 +113,10 @@ def list_timezone(text: str) -> timezone | None:
 
 
 def parse_signals(text: str, tz: timezone, now: datetime, names: list[tuple[str, str]] | None = None,
-                  default_duration: int = 60) -> list[Signal]:
+                  default_duration: int = 60, unknown: list[str] | None = None) -> list[Signal]:
     """Signals in time order. A timezone written in the list (UTC-3, GMT+1) overrides `tz`.
-    Past times within 12h are dropped (already happened today); older ones roll to tomorrow."""
+    Past times within 12h are dropped (already happened today); older ones roll to tomorrow.
+    Lines with a time and a direction but no pair Quotex knows are added to `unknown`."""
     tz = list_timezone(text) or tz
     index = symbol_index(names) if names else None
     out: list[Signal] = []
@@ -148,6 +149,8 @@ def parse_signals(text: str, tz: timezone, now: datetime, names: list[tuple[str,
     for raw in text.splitlines() + [""]:
         f = _fields(raw, index)
         keys = f.keys() - {"otc"}
+        if unknown is not None and {"time", "direction"} <= keys and "pair" not in f:
+            unknown.append(raw.strip())
         if complete(f):  # whole signal on one line
             flush()
             emit(f)

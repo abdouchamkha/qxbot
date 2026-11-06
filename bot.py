@@ -788,7 +788,10 @@ async def main() -> None:
         if list_tz := list_timezone(text):
             print(f"  (times read as {list_tz}, written in the list)")
         names = [(i[1], i[2]) for i in bot.broker.api.instruments]
-        signals = bot.schedule(parse_signals(text, tz, datetime.now(timezone.utc), names or None))
+        unknown: list[str] = []
+        signals = bot.schedule(parse_signals(text, tz, datetime.now(timezone.utc), names or None, unknown=unknown))
+        for line in unknown:
+            print(f"  not understood (pair not on Quotex?): {line}")
         if not signals:
             print("No upcoming signals found.")
             continue

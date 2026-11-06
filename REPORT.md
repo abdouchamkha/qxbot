@@ -30,5 +30,26 @@ Rules learned:
 - `history` command from Quotex's trade-history API.
 - Paste reader that accepts blank lines; PIN prompt shares the input.
 
-## 3. Soak test results
-(filled in below)
+## 3. Soak test (2.5 hours, demo, $1, 1 gale x1.0)
+A feeder pasted 30 random-format lists (one-line, multi-line blocks, Portuguese, Arabic, arrows, `UTC+1` header, unknown pair, same-minute duplicates), 3 signals each, mixed OTC and real-market pairs, plus `stats` / `history` every 30 min.
+
+| | Result |
+|---|---|
+| Trades opened | 41 (25 pending, 16 direct incl. gales) |
+| Errors / tracebacks / lost orders / rejections | **0** |
+| Skipped correctly | 35 payout < 80%, 12 pair closed, 8 same minute (overlap off) |
+| Unknown pair `ABC/XYZ` | silently ignored -> fixed: now printed as "not understood" |
+| Pending entry vs :00 | +23 .. +988 ms, avg +457 ms (Quotex's own execution delay varies) |
+| Direct entry vs :00 | real-market pairs +10 .. +101 ms; OTC (waits for the first price) +224 .. +690 ms |
+| Session result | 23W 17L 1D, signals 23/35, +3.24 (signals were random, so this says nothing about strategy) |
+
+Conclusions:
+- Pending orders are not more exact than a good direct entry (Quotex executes them 0-1s after :00), but they don't depend on the PC's ping/clock and open many pairs in the same second. Kept as default for OTC; set `pending` = n to compare on your PC.
+- Real-market pairs get the most exact entries (fast price feed + pre-entry).
+
+## 4. Ideas for next steps
+1. Post all pending orders at paste time (trades still run if the PC goes offline); trade-off: payout/limit checks happen at paste time.
+2. Telegram bot as the interface (paste lists, settings, results, daily report), then multi-user server with one ISP proxy per user.
+3. Gale as a pending order created before the first trade opens and cancelled in its last second if it wins (exact gale entries; risk: a late cancel).
+4. Reconcile `trades.csv` with Quotex's history API (fills results the bot missed).
+5. Per-pair statistics to auto-skip pairs that keep losing for a given signal provider.
