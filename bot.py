@@ -308,6 +308,7 @@ class Bot:
         # (each waits for the previous send, a safe-entry wait delays the next by up to half a candle).
         self.chart = asyncio.Lock()
         self.taken: set[float] = set()
+        self.reconnecting = asyncio.Lock()
         self.ping = 0.5  # last measured order round trip, seconds  # candle starts that have a list signal
 
     def schedule(self, signals: list[Signal]) -> list[Signal]:
@@ -346,6 +347,29 @@ class Bot:
         self.broker = b
         self._hook(b.api)
         print(f"Connected. {self.cfg['account']} balance: {await b.get_balance()}")
+        await self.clock_check()
+
+    async def clock_check(self, asset: str = "EURUSD_otc") -> None:
+        """Entry timing uses this PC's clock. Each tick reaches us `latency + clock error` after its
+        Quotex timestamp; the smallest such gap over a few seconds is close to the clock error."""
+        await self.broker.start_candles_stream(asset, 60)
+        gaps, last = [], 0.0
+        end = time.time() + 6
+        while time.time() < end:
+            t = self.tick_time(asset)
+            if t != last:
+                last = t
+                gaps.append(time.time() - t)
+            await asyncio.sleep(0.005)
+        if len(gaps) < 4:
+            print("Clock check skipped (no price ticks).")
+            return
+        gap = min(gaps[1:])  # first value is a stale tick
+        if gap < -0.1 or gap > 1.5:
+            print(f"WARNING: this PC clock looks {'behind' if gap < 0 else 'ahead'} of Quotex by about {abs(gap):.1f}s. "
+                  "Sync it (Windows: Settings > Time > Sync now; WSL: sudo hwclock -s) or entries will be off.")
+        else:
+            print(f"Clock OK (ticks arrive {gap * 1000:.0f}ms after Quotex stamps them).")
 
     def _hook(self, api) -> None:
         set_event = api.event_registry.set_event
@@ -365,12 +389,28 @@ class Bot:
         """pyquotex already pings every 5s; this only rebuilds a dead session."""
         while True:
             await asyncio.sleep(30)
+            await self.ensure_connected()
+
+    def alive(self) -> bool:
+        """pyquotex's check_connect() only reports the login state, not a dead socket."""
+        from pyquotex.global_value import WebsocketStatus
+
+        api = self.broker.api
+        return api.state.status == WebsocketStatus.CONNECTED and time.monotonic() - api.last_message_at < 20
+
+    async def ensure_connected(self) -> bool:
+        async with self.reconnecting:  # keepalive and signals must not log in twice at once
             try:
-                if not await self.broker.check_connect():
-                    print("Connection lost, reconnecting...")
-                    await self.connect()
+                for _ in range(10):  # give pyquotex's own quick reconnect a few seconds first
+                    if self.alive():
+                        return True
+                    await asyncio.sleep(1)
+                print("Connection lost, logging in again...")
+                await self.connect()
+                return True
             except Exception as e:
-                print(f"Reconnect failed: {e!r}; retrying in 30s")
+                print(f"Reconnect failed: {e!r}")
+                return False
 
     def price(self, asset: str) -> float | None:
         ticks = self.broker.api.realtime_price.get(asset)
@@ -466,19 +506,28 @@ class Bot:
         at, amount = s.at.timestamp(), self.cfg["amount"]
         signal = f"{s.at:%Y-%m-%d %H:%M} {s.asset} {s.direction}"
         await sleep_until(at - 15)
+        if not await self.ensure_connected():
+            print(f"  {s.at:%H:%M} {s.asset} skipped: not connected")
+            return
         info = await self.instrument(s)
-        payout = info and self.broker.get_payout_by_asset(s.asset, "1" if s.duration < 300 else "5")
+        if info is None:
+            print(f"  {s.at:%H:%M} {s.asset} skipped: pair not found on Quotex (check the name and -OTC)")
+            return
+        if not info[14]:
+            print(f"  {s.at:%H:%M} {s.asset} skipped: Quotex has this pair closed right now")
+            return
+        payout = self.broker.get_payout_by_asset(s.asset, "1" if s.duration < 300 else "5")
         if payout is not None and payout < self.cfg["min_payout"]:
             print(f"  {s.at:%H:%M} {s.asset} {s.direction.upper()} skipped: payout {payout}% < {self.cfg['min_payout']}%")
             return
-        margin = self.cfg["safe_pips"] * pip(s.asset, info and info[4])
+        margin = self.cfg["safe_pips"] * pip(s.asset, info[4])
         async with self.chart:
             await self.show(s, at)
         for level in range(self.cfg["gales"] + 1):
             data = await self.place(s, at, amount, margin if level == 0 else 0.0)
             if not data:
                 return
-            asyncio.create_task(self.report(s, data, level, amount, signal, "safe" if margin and not level else "open"))
+            spawn(self.report(s, data, level, amount, signal, "safe" if margin and not level else "open"), f"result of {s.asset}")
             if level == self.cfg["gales"]:
                 return
             end = at + s.duration
@@ -522,6 +571,21 @@ class Bot:
         return [r for r in read_trades() if r["profile"] == self.cfg["profile"] and r["account"] == self.cfg["account"]]
 
 
+TASKS: set[asyncio.Task] = set()  # asyncio keeps only weak refs to tasks
+
+
+def spawn(coro, what: str) -> None:
+    """Run in the background; an error is printed instead of silently killing the trade."""
+    async def run():
+        try:
+            await coro
+        except Exception as e:
+            print(f"  ERROR in {what}: {e!r}")
+    task = asyncio.create_task(run())
+    TASKS.add(task)
+    task.add_done_callback(TASKS.discard)
+
+
 async def sleep_until(t: float) -> None:
     """Coarse sleep, then a 1ms-step finish for accuracy."""
     while (left := t - time.time()) > 0.05:
@@ -546,7 +610,7 @@ async def main() -> None:
     tz = timezone(timedelta(hours=cfg["utc_offset"]))
     bot = Bot(cfg)
     await bot.connect()
-    asyncio.create_task(bot.keepalive())
+    spawn(bot.keepalive(), "keepalive")
     while True:
         text = await asyncio.to_thread(read_list)
         if text == "stats":
@@ -560,7 +624,7 @@ async def main() -> None:
             print(f"  {s.at:%Y-%m-%d %H:%M} {s.asset:12} {s.direction.upper():4} M{s.duration // 60}")
         print(f"Scheduled {len(signals)} trades. You can paste another list any time.")
         for s in signals:
-            asyncio.create_task(bot.run_signal(s))
+            spawn(bot.run_signal(s), f"{s.at:%H:%M} {s.asset}")
 
 
 if __name__ == "__main__":

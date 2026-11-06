@@ -25,5 +25,8 @@ On start it asks for: email, account (PRACTICE/REAL), amount, list timezone (UTC
 - Overlap (`overlap` = n): only the first list signal per minute is traded, and a martingale that would land on a minute that has a list signal is cancelled. `y` = trade everything.
 - Quotex ignores an order unless the account's chart is on that pair, so orders for the same minute are sent one after another (a few hundred ms apart).
 - Analytics: every result is appended to `trades.csv` (one row per trade, per profile and account). After each result a session line is printed. Type `stats` at the paste prompt for session/today/all-time win rate, net profit, ROI, signals won after martingale, max drawdown, losing streak, wins per gale step, entry delay and per-pair results.
+- Pairs: OTC (`NZDJPY-OTC`, Quotex's own market, open most of the time) and real-market pairs (`EURUSD`, follow forex hours, closed at weekends). 15s before each signal the bot checks Quotex's pair list and skips a pair that doesn't exist (typo, wrong -OTC) or is closed right now.
+- Robustness: the connection is checked before every signal and every 30s (socket state + recent messages; pyquotex's `check_connect()` can't see a dead socket). If it's dead, pyquotex gets 10s to reconnect, then the bot logs in again. Errors inside a trade are printed, never silent.
+- Clock check on connect: warns if this PC's clock is off vs Quotex (all timing depends on it).
 - `open_time` rejection = the pair is closed right now (Quotex closes some OTC pairs while the real market is open).
 - `login_profile/`, `session.json`, `config.json` and `trades.csv` hold your session. Keep them private.
