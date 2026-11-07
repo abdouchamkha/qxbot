@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -16,7 +17,28 @@ const green = Color(0xFF16C784), red = Color(0xFFEA3943), bg = Color(0xFF0B0E14)
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  FlutterForegroundTask.initCommunicationPort();
   runApp(const QxApp());
+}
+
+/// The foreground service only keeps the app process alive (and shows results);
+/// the engine itself runs in the main isolate.
+@pragma('vm:entry-point')
+void startCallback() => FlutterForegroundTask.setTaskHandler(_KeepAlive());
+
+class _KeepAlive extends TaskHandler {
+  @override
+  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {}
+  @override
+  void onRepeatEvent(DateTime timestamp) {}
+  @override
+  Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {}
+}
+
+Future<void> _guard(Future<void> Function() f) async {
+  try {
+    await f();
+  } catch (_) {} // the service is a nice-to-have: trading must not depend on it
 }
 
 /// App state: token, settings, trade history, connection and engine.
@@ -41,6 +63,14 @@ class AppState extends ChangeNotifier {
     for (final t in jsonDecode(prefs.getString('trades') ?? '[]') as List) {
       trades.add(Trade.fromJson(t));
     }
+    FlutterForegroundTask.init(
+      androidNotificationOptions: AndroidNotificationOptions(
+          channelId: 'qxbot', channelName: 'QXBot trading', channelDescription: 'Bot running and trade results',
+          onlyAlertOnce: false),
+      iosNotificationOptions: const IOSNotificationOptions(),
+      foregroundTaskOptions: ForegroundTaskOptions(
+          eventAction: ForegroundTaskEventAction.nothing(), allowWakeLock: true, allowWifiLock: true),
+    );
     _timer = Timer.periodic(const Duration(seconds: 1), (_) => notifyListeners());
     if (token != null) connect();
     notifyListeners();
@@ -50,6 +80,11 @@ class AppState extends ChangeNotifier {
     final n = DateTime.now();
     logs.add('${_two(n.hour)}:${_two(n.minute)}:${_two(n.second)}  $m');
     if (logs.length > 500) logs.removeAt(0);
+    if (running && (m.contains(': WIN') || m.contains(': LOSS') || m.contains(': DRAW'))) {
+      final today = summarize(this.today);
+      _guard(() => FlutterForegroundTask.updateService(
+          notificationTitle: 'QXBot · today ${money(today.net)} (${today.wins}W ${today.losses}L)', notificationText: m));
+    }
     notifyListeners();
   }
 
@@ -108,6 +143,13 @@ class AppState extends ChangeNotifier {
     running = kept.isNotEmpty;
     if (running) {
       WakelockPlus.enable();
+      _guard(() async {
+        await FlutterForegroundTask.requestNotificationPermission();
+        await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+        await FlutterForegroundTask.startService(
+            serviceId: 7, notificationTitle: 'QXBot is trading', notificationText: '${kept.length} signals scheduled',
+            callback: startCallback);
+      });
       log('Started: ${kept.length} signals scheduled');
     }
     notifyListeners();
@@ -119,6 +161,7 @@ class AppState extends ChangeNotifier {
     if (running) log('Stopped');
     running = false;
     WakelockPlus.disable();
+    _guard(() => FlutterForegroundTask.stopService());
     notifyListeners();
   }
 
