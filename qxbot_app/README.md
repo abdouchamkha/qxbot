@@ -39,11 +39,21 @@ dart run tool/cli.dart TOKEN_FILE trade   # demo check: one $1 direct + one $1 p
 - `lib/main.dart`: the UI (Material 3, dark).
 - `tool/cli.dart`: command-line check of the core against the real demo account.
 
-## Verified (2026-11-07, Quotex demo, from `tool/cli.dart` on the PC)
-- Connect with token only, authorization, demo balance, 92 pairs / payouts, parser against the live pair list.
-- Pending order by time created 70s ahead, opened by Quotex at +607ms / +64ms; results received (LOSS -1.00 each), balance updated.
-- Direct order: see the commit message / supervisor report for the result of the second run.
-- 22 unit tests pass (`flutter test`).
+## Verified (2026-11-07, Quotex demo, `tool/cli.dart` on the PC, 6 trades of $1)
+- Connect with the token only (no cookies), authorization, demo balance, 92 pairs with payouts, parser
+  matched against the live pair list.
+- Pending orders by time (created 70s ahead): opened by Quotex at +607ms, +64ms, +296ms; results received
+  (LOSS -1.00, LOSS -1.00, WIN +0.77).
+- Direct order: `orders/open` confirmed (sent -248ms, ping 489ms), result WIN +0.86. Quotex stamped the open
+  -2302ms before :00 (it opens on the last price it holds); the desktop bot sees -0.2..-0.7s. Not investigated
+  further because the desktop bot was trading on the same demo account at the same time.
+- Bug found and fixed on demo: Quotex also sends `f_pending/opened` WITHOUT an error for pending orders it then
+  opens normally (seen at :00.4, `s_pending/opened` at :04.7). The first version took that as a failure and also
+  entered directly (double entry). Now only `f_pending/opened` with an `error` code counts as a failure.
+  The desktop bot's raw hook in `bot.py` treats any `f_pending/opened` as a failure too: worth checking.
+- `s_pending/create` replies of other apps on the same account arrive too: replies are matched by pair.
+- `flutter test`: 23 tests (parser port of every `test_signals.py` case + `test_bot.py` parse tests, engine
+  decisions, a widget smoke test of all tabs).
 
 ## Not verified
 - The app itself on a phone (no device/emulator here): the WebView login + token extraction, the
@@ -63,3 +73,5 @@ dart run tool/cli.dart TOKEN_FILE trade   # demo check: one $1 direct + one $1 p
 - Safe-entry (`safe_pips`) and backtest of past signals from the desktop bot are not ported.
 - If a pending order gets no answer the signal is skipped (no risk of a double entry), as on desktop.
 - Switching demo/real is blocked while the bot is running.
+- Stop ends every scheduled signal (also ones waiting for a gale); the bot stops by itself when all are done.
+- The log shows raw `pending` events from Quotex (shortcut for diagnosing pending orders; remove once settled).

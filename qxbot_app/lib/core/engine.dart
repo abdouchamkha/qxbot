@@ -137,8 +137,7 @@ class Engine {
   final _earlyResults = <String, double>{};
   Completer<Map>? _pendingReply;
   String? _pendingAsset;
-  bool stopped = false;
-  final scheduled = <Signal>[];
+  final scheduled = <Signal>[]; // signals still running; Stop clears it, so old runs end even after a restart
   final started = DateTime.now();
 
   double get ping {
@@ -233,7 +232,6 @@ class Engine {
 
   /// Schedule and run a list (returns at once; trades run in the background).
   List<Signal> start(List<Signal> signals) {
-    stopped = false;
     final kept = schedule(signals);
     scheduled.addAll(kept);
     for (final s in kept) {
@@ -243,7 +241,6 @@ class Engine {
   }
 
   void stop() {
-    stopped = true;
     scheduled.clear();
     taken.clear();
   }
@@ -284,7 +281,7 @@ class Engine {
       'isDemo': cfg.demo ? 1 : 0, 'tournamentId': 0, 'requestId': int.parse(requestId), 'optionType': 3,
     };
     await sleepUntil(at - lead());
-    if (stopped) return null;
+    if (!scheduled.contains(s)) return null;
     final c = Completer<Map>();
     late double sent;
     await chart.run(() async {
@@ -363,7 +360,7 @@ class Engine {
     final c = _pendingOpened[ticket] = Completer();
     log('${s.asset} ${s.direction.toUpperCase()} \$$amount pending order set for ${_clock(at)} (Quotex opens it)');
     await sleepUntil(at - 3.0);
-    final reason = stopped ? 'stopped' : limitReason();
+    final reason = scheduled.contains(s) ? limitReason() : 'stopped';
     if (reason != null) {
       q.emit('pending/cancel', {'ticket': ticket});
       log('${s.asset} pending order cancelled: $reason');
@@ -392,7 +389,7 @@ class Engine {
     final signal = '${s.at.toIso8601String()} ${s.asset} ${s.direction}';
     final usePending = cfg.pending && s.asset.endsWith('_otc') && at - nowS() > 70;
     await sleepUntil(at - (usePending ? 70.0 : 15.0));
-    if (stopped) return;
+    if (!scheduled.contains(s)) return;
     if (!await ensureConnected()) return log('${s.hhmm} ${s.asset} skipped: not connected');
     final info = await instrument(s.asset);
     if (info == null) return log('${s.hhmm} ${s.asset} skipped: pair not found on Quotex');
@@ -429,7 +426,7 @@ class Engine {
         if (_losing(s, data)) log('${s.asset} losing with 5s left, gale ${level + 1} ready');
       }
       await sleepUntil(end - lead()); // final call just before expiry: a late reversal can still save it
-      if (stopped || !_losing(s, data)) return;
+      if (!scheduled.contains(s) || !_losing(s, data)) return;
       if (galeBlocked(end)) return log('gale on ${s.asset} cancelled: a list signal has ${_clock(end)} (overlap off)');
       final nextAmount = (amount * cfg.galeMultiplier * 100).round() / 100;
       if (!canTrade(s, nextAmount, openLoss: amount)) return;

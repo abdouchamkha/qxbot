@@ -75,6 +75,10 @@ class AppState extends ChangeNotifier {
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       // keep the session up between signals too (the engine also reconnects before each signal)
       if (++ticks % 30 == 0 && token != null && status != 'Connecting...' && !connected) connect();
+      if (running && (engine?.scheduled.isEmpty ?? true)) {
+        log('All signals done');
+        stop();
+      }
       notifyListeners();
     });
     if (token != null) connect();
