@@ -29,7 +29,9 @@ Future<void> main(List<String> args) async {
       ..minPayout = 0;
     final e = Engine(q, cfg, [], say);
     final now = nowS();
-    var direct = ((now + 25) ~/ 60 + 1) * 60; // next minute at least 25s away
+    var direct = ((now + 20) ~/ 60 + 1) * 60; // 20..80s away
+    if (direct - now > 68) direct -= 60; // keep it a direct order (pending needs > 70s)
+    if (direct - now < 18) direct += 60;
     final pending = direct + 120; // > 70s ahead: Quotex pending order
     Signal sig(int t, String dir) =>
         Signal(60, pair, DateTime.fromMillisecondsSinceEpoch(t * 1000, isUtc: true), Duration.zero, dir);

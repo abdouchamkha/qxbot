@@ -1,6 +1,6 @@
 // Port of test_signals.py and the parse tests of test_bot.py.
 import 'package:qxbot_app/core/parser.dart';
-import 'package:test/test.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 const tz = Duration(hours: -3);
 DateTime at3(int y, int mo, int d, int h, int mi) => DateTime.utc(y, mo, d, h, mi).subtract(tz); // a UTC-3 wall time

@@ -5,6 +5,15 @@ version: 1.0.0+1
 environment:
   sdk: ^3.5.0
 dependencies:
+  flutter:
+    sdk: flutter
   unorm_dart: ^0.3.0
+  webview_flutter: ^4.10.0
+  flutter_secure_storage: ^9.2.2
+  shared_preferences: ^2.3.2
+  wakelock_plus: ^1.2.8
 dev_dependencies:
-  test: ^1.25.0
+  flutter_test:
+    sdk: flutter
+flutter:
+  uses-material-design: true

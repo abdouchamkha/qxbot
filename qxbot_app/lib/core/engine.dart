@@ -10,7 +10,7 @@ import 'quotex.dart';
 class Settings {
   bool demo = true; // PRACTICE
   double amount = 1;
-  int utcOffsetMin = 0; // the signal list's timezone; a "UTC+6" in the list overrides it
+  int utcOffsetMin = -180; // the signal list's timezone; a "UTC+6" in the list overrides it
   int gales = 1;
   double galeMultiplier = 2.2;
   bool pending = true;
@@ -28,7 +28,7 @@ class Settings {
   static Settings fromJson(Map<String, dynamic> j) => Settings()
     ..demo = j['demo'] ?? true
     ..amount = (j['amount'] ?? 1).toDouble()
-    ..utcOffsetMin = j['utcOffsetMin'] ?? 0
+    ..utcOffsetMin = j['utcOffsetMin'] ?? -180
     ..gales = j['gales'] ?? 1
     ..galeMultiplier = (j['galeMultiplier'] ?? 2.2).toDouble()
     ..pending = j['pending'] ?? true
