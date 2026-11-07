@@ -1,6 +1,7 @@
 // Demo-account check of the core against real Quotex. PRACTICE only (isDemo is hard-wired to 1 here).
 //   dart run tool/cli.dart <token-file> info            balance + open pairs
 //   dart run tool/cli.dart <token-file> trade [PAIR]    one $1 direct order + one $1 pending order, then results
+//   dart run tool/cli.dart <token-file> pending [PAIR]  one $1 pending order only
 import 'dart:io';
 
 import 'package:qxbot_app/core/engine.dart';
@@ -21,7 +22,8 @@ Future<void> main(List<String> args) async {
   final parsed = parseSignals('EUR/USD OTC 10:00 CALL\nBitcoin OTC 10:01 PUT', Duration.zero,
       DateTime.utc(2026, 1, 1, 9), names: q.names);
   say('parser with live pair list: $parsed');
-  if (args.length > 1 && args[1] == 'trade') {
+  if (args.length > 1 && (args[1] == 'trade' || args[1] == 'pending')) {
+    final onlyPending = args[1] == 'pending';
     final pair = args.length > 2 ? args[2] : 'EURUSD_otc';
     final cfg = Settings()
       ..demo = true
@@ -35,10 +37,10 @@ Future<void> main(List<String> args) async {
     final pending = direct + 120; // > 70s ahead: Quotex pending order
     Signal sig(int t, String dir) =>
         Signal(60, pair, DateTime.fromMillisecondsSinceEpoch(t * 1000, isUtc: true), Duration.zero, dir);
-    e.start([sig(direct, 'call'), sig(pending, 'put')]);
+    e.start([if (!onlyPending) sig(direct, 'call'), sig(pending, 'put')]);
     say('scheduled direct CALL at ${DateTime.fromMillisecondsSinceEpoch(direct * 1000)} and pending PUT at '
         '${DateTime.fromMillisecondsSinceEpoch(pending * 1000)} on $pair');
-    while (e.history.length < 2 && nowS() < pending + 120) {
+    while (e.history.length < (onlyPending ? 1 : 2) && nowS() < pending + 120) {
       await Future.delayed(const Duration(seconds: 1));
     }
     final s = summarize(e.history);

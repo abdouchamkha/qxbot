@@ -136,6 +136,7 @@ class Engine {
   final _results = <String, Completer<double>>{}; // deal id -> profit
   final _earlyResults = <String, double>{};
   Completer<Map>? _pendingReply;
+  String? _pendingAsset;
   bool stopped = false;
   final scheduled = <Signal>[];
   final started = DateTime.now();
@@ -155,10 +156,17 @@ class Engine {
   }
 
   void _onEvent(String name, dynamic data) {
+    if (name.contains('pending')) log('  quotex $name ${_short(data)}'); // shortcut: raw log until pending replies are fully mapped
     if (name == 's_pending/create' || name == 'f_pending/create') {
-      if (_pendingReply?.isCompleted == false) _pendingReply!.complete(data is Map ? data : {'error': '$data'});
+      // Another app on the same account gets these too: only take a reply for our pair.
+      final asset = data is Map && data['pending'] is Map ? (data['pending'] as Map)['asset'] : null;
+      if (_pendingReply?.isCompleted == false && (asset == null || asset == _pendingAsset)) {
+        _pendingReply!.complete(data is Map ? data : {'error': '$data'});
+      }
     }
-    if (name == 'f_pending/opened' && data is Map) {
+    // Quotex also sends f_pending/opened WITHOUT an error for orders it then opens normally (seen on demo
+    // 2026-11-07: f_ at :00.4, s_pending/opened at :04.7, order opened): only an error code is a failure.
+    if (name == 'f_pending/opened' && data is Map && data['ticket'] != null && data['error'] != null) {
       _pendingOpened.remove('${data['ticket']}')?.complete({'error': 'pending failed (code ${data['error']})'});
     }
     if ((name == 's_orders/open' || name == 'f_orders/open') && data is Map) {
@@ -334,6 +342,7 @@ class Engine {
     };
     final reply = await pendingLock.run(() async {
       _pendingReply = Completer();
+      _pendingAsset = s.asset;
       final sent = nowS();
       q.emit('pending/create', payload);
       try {
@@ -345,7 +354,12 @@ class Engine {
       }
     });
     if (reply.containsKey('error')) return reply;
-    final ticket = '${(reply['pending'] as Map?)?['ticket']}';
+    final t = (reply['pending'] as Map?)?['ticket'];
+    if (t == null) {
+      log('${s.asset} pending reply without ticket: skipped (no risk of a double entry)');
+      return null;
+    }
+    final ticket = '$t';
     final c = _pendingOpened[ticket] = Completer();
     log('${s.asset} ${s.direction.toUpperCase()} \$$amount pending order set for ${_clock(at)} (Quotex opens it)');
     await sleepUntil(at - 3.0);
@@ -445,8 +459,14 @@ class Engine {
         (data['openPrice'] as num?)?.toDouble(), result, profit);
     history.add(t);
     onTrade?.call(t);
+    q.emit('balance/list'); // closes don't carry the new balance
     log('${s.asset} ${s.direction.toUpperCase()}${level > 0 ? ' G$level' : ''}: ${result.toUpperCase()} ${_money(profit)}');
   }
+}
+
+String _short(dynamic d) {
+  final t = '$d';
+  return t.length > 300 ? '${t.substring(0, 300)}...' : t;
 }
 
 String _money(double v) => '${v >= 0 ? '+' : ''}${v.toStringAsFixed(2)}';
