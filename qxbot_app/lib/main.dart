@@ -71,7 +71,12 @@ class AppState extends ChangeNotifier {
       foregroundTaskOptions: ForegroundTaskOptions(
           eventAction: ForegroundTaskEventAction.nothing(), allowWakeLock: true, allowWifiLock: true),
     );
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) => notifyListeners());
+    var ticks = 0;
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      // keep the session up between signals too (the engine also reconnects before each signal)
+      if (++ticks % 30 == 0 && token != null && status != 'Connecting...' && !connected) connect();
+      notifyListeners();
+    });
     if (token != null) connect();
     notifyListeners();
   }
@@ -106,12 +111,16 @@ class AppState extends ChangeNotifier {
     if (token == null) return;
     status = 'Connecting...';
     notifyListeners();
-    await q?.close();
-    final c = q = QuotexClient(token!, demo: cfg.demo);
+    final reuse = q != null && q!.demo == cfg.demo && q!.token == token; // keep the running engine's client
+    if (!reuse) {
+      if (running) stop();
+      await q?.close();
+    }
+    final c = q = reuse ? q! : QuotexClient(token!, demo: cfg.demo);
     try {
       await c.connect();
       await c.next((n, d) => n == 'instruments/list', const Duration(seconds: 10));
-      engine = Engine(c, cfg, trades, log, onTrade: (_) => saveTrades());
+      if (!reuse || engine == null) engine = Engine(c, cfg, trades, log, onTrade: (_) => saveTrades());
       status = 'Connected';
       log('Connected to Quotex (${cfg.demo ? 'DEMO' : 'REAL'} account)');
     } catch (e) {
@@ -238,22 +247,22 @@ class _LoginPageState extends State<LoginPage> {
     web = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(NavigationDelegate(onPageFinished: _onPage))
-      ..loadRequest(Uri.parse('https://quotex.com/en/sign-in'));
+      ..loadRequest(Uri.parse('https://quotex.com/en/demo-trade')); // redirects to sign-in when logged out
   }
 
   Future<void> _onPage(String url) async {
-    if (!url.contains('/trade') && !url.contains('demo-trade')) return;
-    // Logged in: the trade page HTML holds the session token.
-    final r = await web.runJavaScriptReturningResult(
-        r'(function(){var m=document.documentElement.innerHTML.match(/"token":"([^"]+)"/);return m?m[1]:"";})()');
-    var t = r.toString();
-    if (t.startsWith('"')) t = jsonDecode(t) as String;
-    if (t.isNotEmpty) {
-      await widget.app.setToken(t);
-    } else if (!url.contains('demo-trade') && !grabbing) {
-      grabbing = true;
-      await web.loadRequest(Uri.parse('https://quotex.com/en/demo-trade'));
+    if (!url.contains('/trade') || grabbing) return;
+    grabbing = true;
+    // Logged in: the trade page's inline script JSON holds the session token (may appear a bit after load).
+    for (var i = 0; i < 30 && mounted; i++) {
+      final r = await web.runJavaScriptReturningResult(
+          r'(function(){var m=document.documentElement.innerHTML.match(/"token":"([^"]+)"/);return m?m[1]:"";})()');
+      var t = r.toString();
+      if (t.startsWith('"')) t = jsonDecode(t) as String;
+      if (t.isNotEmpty) return widget.app.setToken(t);
+      await Future.delayed(const Duration(seconds: 1));
     }
+    grabbing = false;
   }
 
   Future<void> _pasteToken() async {

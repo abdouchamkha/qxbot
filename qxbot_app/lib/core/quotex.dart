@@ -33,14 +33,14 @@ class QuotexClient {
 
   Future<void> connect() async {
     await close();
-    _auth = Completer();
+    final auth = _auth = Completer();
     final ws = _ws = await WebSocket.connect('wss://$host/socket.io/?EIO=3&transport=websocket',
         headers: {'User-Agent': 'Quotex/1.0', 'Origin': 'https://quotex.com'}).timeout(const Duration(seconds: 15));
-    ws.listen(_onFrame, onDone: () => _auth?.isCompleted == false ? _auth!.completeError('socket closed') : null,
-        onError: (_) {}, cancelOnError: false);
+    ws.listen((f) => identical(ws, _ws) ? _onFrame(f) : null, // ignore a replaced socket's last frames
+        onDone: () => auth.isCompleted ? null : auth.completeError('socket closed'), onError: (_) {}, cancelOnError: false);
     _ping = Timer.periodic(const Duration(seconds: 25), (_) => _send('2'));
     _tick = Timer.periodic(const Duration(seconds: 5), (_) => emit('tick'));
-    await _auth!.future.timeout(const Duration(seconds: 15));
+    await auth.future.timeout(const Duration(seconds: 15));
     emit('instruments/get');
     emit('balance/list');
     chart = null;
