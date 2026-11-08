@@ -18,11 +18,12 @@ class Settings {
   bool overlap = false;
   double minPayout = 80;
   double stopLoss = 0, takeProfit = 0; // 0 = off
+  bool ai = true; // AI features (Gemini) offered when a key is available
 
   Map<String, dynamic> toJson() => {
         'demo': demo, 'amount': amount, 'utcOffsetMin': utcOffsetMin, 'gales': gales,
         'galeMultiplier': galeMultiplier, 'pending': pending, 'preEntryMs': preEntryMs, 'overlap': overlap,
-        'minPayout': minPayout, 'stopLoss': stopLoss, 'takeProfit': takeProfit,
+        'minPayout': minPayout, 'stopLoss': stopLoss, 'takeProfit': takeProfit, 'ai': ai,
       };
 
   static Settings fromJson(Map<String, dynamic> j) => Settings()
@@ -36,7 +37,8 @@ class Settings {
     ..overlap = j['overlap'] ?? false
     ..minPayout = (j['minPayout'] ?? 80).toDouble()
     ..stopLoss = (j['stopLoss'] ?? 0).toDouble()
-    ..takeProfit = (j['takeProfit'] ?? 0).toDouble();
+    ..takeProfit = (j['takeProfit'] ?? 0).toDouble()
+    ..ai = j['ai'] ?? true;
 }
 
 class Trade {

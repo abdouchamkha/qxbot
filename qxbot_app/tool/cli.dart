@@ -2,9 +2,13 @@
 //   dart run tool/cli.dart <token-file> info            balance + open pairs
 //   dart run tool/cli.dart <token-file> trade [PAIR]    one $1 direct order + one $1 pending order, then results
 //   dart run tool/cli.dart <token-file> pending [PAIR]  one $1 pending order only
+//   dart run tool/cli.dart <token-file> candles [PAIR] [MIN]  read the last MIN 1-minute candles (history/load, no trade, no chart switch)
+//   dart run tool/cli.dart <token-file> backtest FILE [TZH]  backtest a list file's past signals (read-only)
 //   dart run tool/cli.dart <token-file> clock [PAIR]    follow a pair's ticks for 20s and print the clock estimate (no trade)
 import 'dart:io';
+import 'dart:math';
 
+import 'package:qxbot_app/core/backtest.dart';
 import 'package:qxbot_app/core/engine.dart';
 import 'package:qxbot_app/core/parser.dart';
 import 'package:qxbot_app/core/quotex.dart';
@@ -44,6 +48,33 @@ Future<void> main(List<String> args) async {
   final parsed = parseSignals('EUR/USD OTC 10:00 CALL\nBitcoin OTC 10:01 PUT', Duration.zero,
       DateTime.utc(2026, 1, 1, 9), names: q.names);
   say('parser with live pair list: $parsed');
+  if (args.length > 1 && args[1] == 'candles') {
+    final pair = args.length > 2 ? args[2] : 'EURUSD_otc', minutes = args.length > 3 ? int.parse(args[3]) : 300;
+    final sw = Stopwatch()..start();
+    final c = await q.candles(pair, q.clock.now().floor() - minutes * 60);
+    final times = c.keys.toList()..sort();
+    say('candles $pair: ${c.length} in ${sw.elapsedMilliseconds} ms'
+        '${times.isEmpty ? '' : ', ${DateTime.fromMillisecondsSinceEpoch(times.first * 1000)} .. '
+            '${DateTime.fromMillisecondsSinceEpoch(times.last * 1000)}, last ${c[times.last]}'}');
+  }
+  if (args.length > 2 && args[1] == 'backtest') {
+    final text = File(args[2]).readAsStringSync();
+    final tz = Duration(minutes: ((args.length > 3 ? double.parse(args[3]) : -3) * 60).round());
+    final sigs = pastSignals(text, tz, DateTime.now(), names: q.names, forceTz: args.length > 3);
+    final rows = <(Signal, BtResult)>[];
+    for (final asset in {for (final s in sigs) s.asset}) {
+      final first = sigs.where((s) => s.asset == asset).map((s) => s.at.millisecondsSinceEpoch ~/ 1000).reduce(min);
+      final c = await q.candles(asset, first - 60);
+      rows.addAll([for (final s in sigs.where((s) => s.asset == asset)) (s, backtestResult(s, c, 1))]);
+    }
+    rows.sort((a, b) => a.$1.at.compareTo(b.$1.at));
+    for (final (s, r) in rows) {
+      say('  ${s.hhmm} ${s.asset.padRight(12)} ${s.direction.toUpperCase().padRight(4)} $r');
+    }
+    final sum = summarizeBacktest(rows, gales: 1, amount: 1, mult: 2.2, payout: (a) => (q.instrument(a)?[18] as num?)?.toDouble());
+    say('backtest: ${sum.wins}W ${sum.losses}L ${sum.draws}D ${sum.nodata} no data, '
+        '${sum.winRate.toStringAsFixed(0)}% with G1, ${sum.winRateNoGale.toStringAsFixed(0)}% without, net ${sum.net.toStringAsFixed(2)}');
+  }
   if (args.length > 1 && args[1] == 'clock') {
     q.follow(args.length > 2 ? args[2] : 'EURUSD_otc');
     for (var i = 0; i < 10; i++) {

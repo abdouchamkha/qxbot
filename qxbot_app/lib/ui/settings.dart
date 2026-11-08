@@ -146,6 +146,7 @@ class _SettingsPageState extends State<SettingsPage> {
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => BackgroundSetupPage(app))),
         ),
       ),
+      _AiPanel(app),
       Panel(
         title: l.language,
         child: SegmentedButton<String>(
@@ -210,7 +211,77 @@ class _SettingsPageState extends State<SettingsPage> {
         icon: const Icon(Icons.logout),
         label: Text(l.logout),
       ),
-      Center(child: ltrText('QXBot 1.2.0', style: const TextStyle(color: textLo, fontSize: 12))),
+      Center(child: ltrText('QXBot 1.3.0', style: const TextStyle(color: textLo, fontSize: 12))),
     ]);
+  }
+}
+
+/// AI on/off and an optional own Gemini key (secure storage; the built-in key is used otherwise).
+class _AiPanel extends StatefulWidget {
+  final AppState app;
+  const _AiPanel(this.app);
+  @override
+  State<_AiPanel> createState() => _AiPanelState();
+}
+
+class _AiPanelState extends State<_AiPanel> {
+  final key = TextEditingController();
+
+  @override
+  void dispose() {
+    key.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context), app = widget.app;
+    final status = app.userAiKey.isNotEmpty
+        ? l.aiKeyOwn
+        : AppState.builtInAiKey.isNotEmpty
+            ? l.aiKeyBuiltIn
+            : l.aiKeyNone;
+    return Panel(
+      title: l.aiSection,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(l.aiSwitch, style: const TextStyle(fontWeight: FontWeight.w700)),
+          subtitle: Text(l.aiSwitchSub),
+          value: app.cfg.ai,
+          onChanged: (v) {
+            app.cfg.ai = v;
+            app.saveSettings();
+          },
+        ),
+        Text(status, style: TextStyle(color: app.aiKey.isEmpty ? amber : textMid)),
+        gap8,
+        TextField(
+          controller: key,
+          obscureText: true,
+          autocorrect: false,
+          enableSuggestions: false,
+          textDirection: TextDirection.ltr,
+          decoration: InputDecoration(labelText: l.aiKeyLabel),
+        ),
+        gap8,
+        Row(children: [
+          Expanded(
+            child: FilledButton.tonal(
+              onPressed: () async {
+                if (key.text.trim().isEmpty) return;
+                await app.setUserAiKey(key.text);
+                key.clear();
+              },
+              child: Text(l.save),
+            ),
+          ),
+          if (app.userAiKey.isNotEmpty) ...[
+            gap8,
+            TextButton(onPressed: () => app.setUserAiKey(''), child: Text(l.clear)),
+          ],
+        ]),
+      ]),
+    );
   }
 }

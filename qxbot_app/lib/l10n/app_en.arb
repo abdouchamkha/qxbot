@@ -703,5 +703,114 @@
         "type": "String"
       }
     }
-  }
+  },
+  "backtest": "Backtest",
+  "backtestTitle": "Backtest a list",
+  "backtestIntro": "Checks how the list's signals would have done in the last 24 h, on Quotex 1-minute candles. No trade is placed.",
+  "tryTimezones": "Try several timezones (UTC-3, UTC+1, UTC+6)",
+  "tryTimezonesSub": "Finds the timezone the channel really uses",
+  "runBacktest": "Run backtest",
+  "backtesting": "Loading candles...",
+  "noPastSignals": "No signals found in this list.",
+  "timesReadAs": "Times read as {tz}",
+  "@timesReadAs": {
+    "placeholders": {
+      "tz": {
+        "type": "String"
+      }
+    }
+  },
+  "bestTz": "best",
+  "btWinRate": "Win rate {withGale} with martingale · {noGale} without",
+  "@btWinRate": {
+    "placeholders": {
+      "withGale": {
+        "type": "String"
+      },
+      "noGale": {
+        "type": "String"
+      }
+    }
+  },
+  "btCounts": "{wins} won · {losses} lost · {draws} draw · {nodata} no data",
+  "@btCounts": {
+    "placeholders": {
+      "wins": {
+        "type": "String"
+      },
+      "losses": {
+        "type": "String"
+      },
+      "draws": {
+        "type": "String"
+      },
+      "nodata": {
+        "type": "String"
+      }
+    }
+  },
+  "btNet": "Net {net} at {amount} per trade (your settings, current payouts)",
+  "@btNet": {
+    "placeholders": {
+      "net": {
+        "type": "String"
+      },
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "noData": "no data",
+  "passedSignals": "{count, plural, =1{1 signal already passed: backtest it} other{{count} signals already passed: backtest them}}",
+  "@passedSignals": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "readWithAi": "Read with AI",
+  "aiReading": "AI is reading the list...",
+  "aiReadNote": "Read by AI: check every line before you start.",
+  "aiRejected": "{count, plural, =1{1 line ignored (pair or time not valid)} other{{count} lines ignored (pair or time not valid)}}",
+  "@aiRejected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiNothing": "The AI found no signals in this text.",
+  "noSignalsShort": "No signals understood in this text.",
+  "aiAnalysis": "AI analysis",
+  "aiAnalyzing": "AI is looking at your results...",
+  "aiWorks": "What works",
+  "aiLoses": "What loses",
+  "aiMartingale": "Martingale",
+  "aiSuggestions": "Suggestions",
+  "aiNotAdvice": "AI summary of your own numbers, not financial advice.",
+  "aiFrom": "From {time}",
+  "@aiFrom": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "refresh": "Refresh",
+  "aiNoKey": "No AI key. Add one in Settings > AI.",
+  "aiBadKey": "The AI key was refused. Check it in Settings > AI.",
+  "aiQuota": "AI limit reached for now (free quota). Try again later.",
+  "aiTimeout": "The AI took too long. Try again.",
+  "aiFailed": "The AI could not answer. Try again.",
+  "aiNoPairs": "Connect to Quotex first (the AI needs the pair list).",
+  "aiSection": "AI (Gemini)",
+  "aiSwitch": "AI help",
+  "aiSwitchSub": "Read hard lists and explain your results. Only the list text and totals are sent to Google, never your login.",
+  "aiKeyBuiltIn": "Using the built-in key",
+  "aiKeyOwn": "Using your own key",
+  "aiKeyNone": "No key: AI is off",
+  "aiKeyLabel": "Your Gemini API key (optional)",
+  "save": "Save",
+  "clear": "Clear"
 }

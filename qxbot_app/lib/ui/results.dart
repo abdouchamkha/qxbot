@@ -7,6 +7,7 @@ import '../app_state.dart';
 import '../core/engine.dart';
 import '../format.dart';
 import '../l10n/app_localizations.dart';
+import 'ai.dart';
 import 'common.dart';
 
 class ResultCard extends StatelessWidget {
@@ -107,6 +108,16 @@ class ResultsPage extends StatelessWidget {
           ]),
         ]),
       ),
+      if (app.aiReady && mine.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+            onPressed: () => showCoach(context, app),
+            icon: const Icon(Icons.auto_awesome, color: blue),
+            label: Text(l.aiAnalysis),
+          ),
+        ),
       if (mine.isEmpty)
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 32),

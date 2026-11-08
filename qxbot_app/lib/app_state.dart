@@ -9,6 +9,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import 'core/ai.dart';
+import 'core/backtest.dart';
 import 'core/engine.dart';
 import 'core/parser.dart';
 import 'core/quotex.dart';
@@ -86,6 +88,68 @@ class AppState extends ChangeNotifier {
   String lang = '';
   Locale? get localeOverride => lang.isEmpty ? null : Locale(lang);
 
+  // ------------------------------------------------------------ AI (Gemini) and backtest
+
+  /// Built in at build time (`--dart-define-from-file=.env`); a key typed in Settings wins.
+  static const builtInAiKey = String.fromEnvironment('GEMINI_API_KEY');
+  String userAiKey = '';
+  String get aiKey => userAiKey.isNotEmpty ? userAiKey : builtInAiKey;
+  bool get aiReady => cfg.ai && aiKey.isNotEmpty;
+
+  /// Last coach answer: {at, lang, data}, kept across restarts.
+  Map<String, dynamic>? lastCoach;
+
+  Future<void> setUserAiKey(String k) async {
+    userAiKey = k.trim();
+    userAiKey.isEmpty ? await _secure.delete(key: 'gemini_key') : await _secure.write(key: 'gemini_key', value: userAiKey);
+    notifyListeners();
+  }
+
+  List<(String, String)> get pairNames => q?.names ?? const [];
+
+  /// AI list reader: the raw text, the Quotex pair list and the list timezone only. User-triggered.
+  Future<AiParse> aiReadList(String text) async {
+    if (pairNames.isEmpty) throw const AiException('noPairs');
+    final tz = Duration(minutes: cfg.utcOffsetMin);
+    final json = await Gemini(aiKey).json(listPrompt(text, pairNames, tz), listSchema);
+    return validateAiSignals(json, pairNames, tz, serverNow);
+  }
+
+  /// AI coach on aggregated stats of this account's trades (and a backtest summary when given). User-triggered.
+  Future<Map<String, Object>> aiCoach(String langCode, {Map<String, Object?>? backtest}) async {
+    final skips = logs.where((e) => e.event.key == 'skipped' && (e.event.args['reason'] as EngineEvent?)?.key == 'payout').length;
+    final stats = coachStats(mine, payoutSkips: skips, backtest: backtest, settings: {
+      'amount': cfg.amount, 'martingale_steps': cfg.gales, 'martingale_multiplier': cfg.galeMultiplier,
+      'min_payout_pct': cfg.minPayout, 'daily_stop_loss': cfg.stopLoss, 'daily_take_profit': cfg.takeProfit,
+    });
+    final data = cleanCoach(await Gemini(aiKey).json(coachPrompt(stats, langCode), coachSchema));
+    lastCoach = {'at': DateTime.now().toIso8601String(), 'lang': langCode, 'backtest': backtest != null, 'data': data};
+    prefs.setString('aiCoach', jsonEncode(lastCoach));
+    notifyListeners();
+    return data;
+  }
+
+  /// Scores past signals on Quotex 1-minute candles (read-only, under the engine's chart lock), with at least one
+  /// martingale step so the summary can show the rate with and without it.
+  Future<List<(Signal, BtResult)>> backtest(List<Signal> sigs) async {
+    final c = q;
+    if (c == null || !connected) throw StateError('not connected');
+    final gales = cfg.gales < 1 ? 1 : cfg.gales;
+    final rows = <(Signal, BtResult)>[];
+    for (final asset in {for (final s in sigs) s.asset}) {
+      final mine = sigs.where((s) => s.asset == asset).toList();
+      final first = mine.map((s) => s.at.millisecondsSinceEpoch ~/ 1000).reduce((a, b) => a < b ? a : b);
+      Future<Map<int, Candle>> load() => c.candles(asset, first - 60);
+      final candles = engine == null ? await load() : await engine!.chart.run(load);
+      rows.addAll([for (final s in mine) (s, backtestResult(s, candles, gales))]);
+    }
+    return rows..sort((a, b) => a.$1.at.compareTo(b.$1.at));
+  }
+
+  BtSummary summarizeBt(List<(Signal, BtResult)> rows) => summarizeBacktest(rows,
+      gales: cfg.gales, amount: cfg.amount, mult: cfg.galeMultiplier,
+      payout: (a) => (q?.instrument(a)?[18] as num?)?.toDouble());
+
   /// Strings for code without a BuildContext (notifications).
   L get strings {
     final code = lang.isNotEmpty ? lang : PlatformDispatcher.instance.locale.languageCode;
@@ -95,6 +159,9 @@ class AppState extends ChangeNotifier {
   Future<void> load() async {
     prefs = await SharedPreferences.getInstance();
     token = await _secure.read(key: 'token');
+    userAiKey = await _secure.read(key: 'gemini_key') ?? '';
+    final cached = prefs.getString('aiCoach');
+    if (cached != null) lastCoach = jsonDecode(cached) as Map<String, dynamic>;
     lang = prefs.getString('lang') ?? '';
     onboarded = isOnboarded(prefs, token);
     bgSetupSeen = prefs.getBool('bgSetupSeen') ?? false;
@@ -270,13 +337,15 @@ class AppState extends ChangeNotifier {
   DateTime get serverNow =>
       q == null ? DateTime.now() : DateTime.fromMicrosecondsSinceEpoch((q!.clock.now() * 1e6).round());
 
-  List<Signal> parse(String text, {List<String>? unknown}) =>
-      parseSignals(text, Duration(minutes: cfg.utcOffsetMin), serverNow, names: q?.names, unknown: unknown);
+  List<Signal> parse(String text, {List<String>? unknown, List<Signal>? passed}) => parseSignals(
+      text, Duration(minutes: cfg.utcOffsetMin), serverNow, names: q?.names, unknown: unknown, passed: passed);
 
-  int start(String text) {
+  int start(String text) => startSignals(parse(text));
+
+  int startSignals(List<Signal> signals) {
     final e = engine;
     if (e == null) return 0;
-    final kept = e.start(parse(text));
+    final kept = e.start(signals);
     running = kept.isNotEmpty;
     if (running) {
       _guard(() => WakelockPlus.enable());

@@ -860,4 +860,176 @@ class LAr extends L {
   String rLate(String seconds) {
     return 'بدأت دقيقتها قبل $seconds ثانية (كان الهاتف نائمًا)؛ الدخول المتأخر أسوأ من عدم الدخول';
   }
+
+  @override
+  String get backtest => 'اختبار القائمة';
+
+  @override
+  String get backtestTitle => 'اختبار قائمة على الماضي';
+
+  @override
+  String get backtestIntro =>
+      'يتحقق من نتيجة إشارات القائمة خلال آخر 24 ساعة على شموع Quotex لمدة دقيقة. لا تُفتح أي صفقة.';
+
+  @override
+  String get tryTimezones => 'تجربة عدة مناطق زمنية (UTC-3، UTC+1، UTC+6)';
+
+  @override
+  String get tryTimezonesSub =>
+      'لمعرفة المنطقة الزمنية التي تستخدمها القناة فعلًا';
+
+  @override
+  String get runBacktest => 'ابدأ الاختبار';
+
+  @override
+  String get backtesting => 'جارٍ تحميل الشموع...';
+
+  @override
+  String get noPastSignals => 'لم يتم العثور على إشارات في هذه القائمة.';
+
+  @override
+  String timesReadAs(String tz) {
+    return 'الأوقات محسوبة بتوقيت $tz';
+  }
+
+  @override
+  String get bestTz => 'الأفضل';
+
+  @override
+  String btWinRate(String withGale, String noGale) {
+    return 'نسبة النجاح $withGale مع المضاعفة · $noGale بدونها';
+  }
+
+  @override
+  String btCounts(String wins, String losses, String draws, String nodata) {
+    return '$wins رابحة · $losses خاسرة · $draws تعادل · $nodata بلا بيانات';
+  }
+
+  @override
+  String btNet(String net, String amount) {
+    return 'الصافي $net بمبلغ $amount لكل صفقة (إعداداتك، ونسب الربح الحالية)';
+  }
+
+  @override
+  String get noData => 'بلا بيانات';
+
+  @override
+  String passedSignals(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count إشارة فات وقتها: اختبرها',
+      few: '$count إشارات فات وقتها: اختبرها',
+      two: 'إشارتان فات وقتهما: اختبرهما',
+      one: 'إشارة واحدة فات وقتها: اختبرها',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get readWithAi => 'القراءة بالذكاء الاصطناعي';
+
+  @override
+  String get aiReading => 'الذكاء الاصطناعي يقرأ القائمة...';
+
+  @override
+  String get aiReadNote => 'قرأها الذكاء الاصطناعي: راجع كل سطر قبل البدء.';
+
+  @override
+  String aiRejected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'تم تجاهل $count سطرًا (زوج أو وقت غير صالح)',
+      few: 'تم تجاهل $count أسطر (زوج أو وقت غير صالح)',
+      two: 'تم تجاهل سطرين (زوج أو وقت غير صالح)',
+      one: 'تم تجاهل سطر واحد (زوج أو وقت غير صالح)',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get aiNothing => 'لم يجد الذكاء الاصطناعي أي إشارة في هذا النص.';
+
+  @override
+  String get noSignalsShort => 'لم يتم فهم أي إشارة في هذا النص.';
+
+  @override
+  String get aiAnalysis => 'تحليل بالذكاء الاصطناعي';
+
+  @override
+  String get aiAnalyzing => 'الذكاء الاصطناعي يحلل نتائجك...';
+
+  @override
+  String get aiWorks => 'ما ينجح';
+
+  @override
+  String get aiLoses => 'ما يخسر';
+
+  @override
+  String get aiMartingale => 'المضاعفة';
+
+  @override
+  String get aiSuggestions => 'اقتراحات';
+
+  @override
+  String get aiNotAdvice => 'ملخص آلي لأرقامك أنت، وليس نصيحة مالية.';
+
+  @override
+  String aiFrom(String time) {
+    return 'بتاريخ $time';
+  }
+
+  @override
+  String get refresh => 'تحديث';
+
+  @override
+  String get aiNoKey =>
+      'لا يوجد مفتاح للذكاء الاصطناعي. أضفه من الإعدادات > الذكاء الاصطناعي.';
+
+  @override
+  String get aiBadKey =>
+      'تم رفض مفتاح الذكاء الاصطناعي. تحقق منه في الإعدادات.';
+
+  @override
+  String get aiQuota =>
+      'تم بلوغ حد الاستخدام المجاني للذكاء الاصطناعي حاليًا. حاول لاحقًا.';
+
+  @override
+  String get aiTimeout => 'استغرق الذكاء الاصطناعي وقتًا طويلًا. حاول مجددًا.';
+
+  @override
+  String get aiFailed => 'تعذّر على الذكاء الاصطناعي الإجابة. حاول مجددًا.';
+
+  @override
+  String get aiNoPairs =>
+      'اتصل بـ Quotex أولًا (يحتاج الذكاء الاصطناعي إلى قائمة الأزواج).';
+
+  @override
+  String get aiSection => 'الذكاء الاصطناعي (Gemini)';
+
+  @override
+  String get aiSwitch => 'مساعدة الذكاء الاصطناعي';
+
+  @override
+  String get aiSwitchSub =>
+      'قراءة القوائم الصعبة وشرح نتائجك. يُرسل إلى Google نص القائمة والإجماليات فقط، ولا تُرسل بيانات دخولك أبدًا.';
+
+  @override
+  String get aiKeyBuiltIn => 'يُستخدم المفتاح المدمج';
+
+  @override
+  String get aiKeyOwn => 'يُستخدم مفتاحك الخاص';
+
+  @override
+  String get aiKeyNone => 'لا يوجد مفتاح: الذكاء الاصطناعي متوقف';
+
+  @override
+  String get aiKeyLabel => 'مفتاح Gemini الخاص بك (اختياري)';
+
+  @override
+  String get save => 'حفظ';
+
+  @override
+  String get clear => 'مسح';
 }

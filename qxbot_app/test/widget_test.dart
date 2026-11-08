@@ -4,11 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qxbot_app/app_state.dart';
+import 'package:qxbot_app/core/ai.dart';
+import 'package:qxbot_app/core/backtest.dart';
 import 'package:qxbot_app/core/engine.dart';
 import 'package:qxbot_app/core/quotex.dart';
 import 'package:qxbot_app/format.dart';
 import 'package:qxbot_app/l10n/app_localizations.dart';
 import 'package:qxbot_app/main.dart';
+import 'package:qxbot_app/ui/ai.dart';
+import 'package:qxbot_app/ui/backtest.dart';
 import 'package:qxbot_app/ui/home.dart';
 import 'package:qxbot_app/ui/onboarding.dart';
 import 'package:qxbot_app/ui/results.dart';
@@ -189,6 +193,66 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('Paste: a past signal offers a backtest; unknown lines offer "Read with AI" when AI is on', (tester) async {
+    final app = await makeApp('en', running: false);
+    app.engine = Engine(QuotexClient('x', demo: true), app.cfg, app.trades, app.log);
+    app.userAiKey = 'k'; // AI available; the button is not tapped (no network in tests)
+    final past = listTime(const Duration(minutes: -30));
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform,
+        (call) async => call.method == 'Clipboard.getData' ? {'text': '$list\nM1 GBPJPY $past PUT'} : null);
+    await tester.pumpWidget(qxMaterialApp(app, Shell(app)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Paste list from clipboard'));
+    await tester.pumpAndSettle();
+    expect(find.text('1 signal found'), findsOneWidget);
+    expect(find.text('Read with AI'), findsOneWidget);
+    expect(find.text('1 signal already passed: backtest it'), findsOneWidget);
+    app.cfg.ai = false; // switched off in Settings: no AI button
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
+    expect(find.text('Read with AI'), findsNothing);
+  });
+
+  for (final lang in ['en', 'ar']) {
+    testWidgets('backtest results and AI analysis render ($lang)', (tester) async {
+      final app = await makeApp(lang, running: false);
+      final l = lookupL(Locale(lang));
+      final sigs = app.parse('M1 EURUSD-OTC $soon CALL\nM1 GBPJPY $soon PUT\nM1 USDJPY $soon CALL');
+      final rows = [(sigs[0], const BtResult('win', 1)), (sigs[1], const BtResult('loss')), (sigs[2], const BtResult('nodata'))];
+      final run = BtRun(-180, rows, summarizeBacktest(rows, gales: 1, amount: 1, mult: 2.2));
+      await tester.pumpWidget(qxMaterialApp(app, Scaffold(body: ListView(children: [BtRunView(run, 1, best: true)]))));
+      await tester.pumpAndSettle();
+      expect(find.text(l.btWinRate(ltr('50%'), ltr('0%'))), findsOneWidget);
+      expect(find.text('${l.win} ${l.galeTag(ltr(1))}'), findsOneWidget);
+      expect(find.text(l.noData), findsOneWidget);
+      expect(find.text(l.timesReadAs(ltr('UTC-3'))), findsOneWidget);
+
+      await tester.pumpWidget(qxMaterialApp(app, BacktestPage(app, text: 'UTC+6\n$list')));
+      await tester.pumpAndSettle();
+      expect(find.text('UTC+6'), findsOneWidget); // default timezone = the one written in the list
+      expect(find.text(l.runBacktest), findsOneWidget);
+
+      app.lastCoach = {
+        'at': DateTime.now().toIso8601String(), 'lang': lang, 'backtest': false,
+        'data': {'summary': 'S', 'works': ['W1'], 'loses': ['L1'], 'martingale': 'M', 'suggestions': ['X1', 'X2']},
+      };
+      await tester.pumpWidget(qxMaterialApp(app, Scaffold(body: CoachSheet(app))));
+      await tester.pumpAndSettle();
+      for (final t in ['S', '• W1', '• L1', '• M', '• X2', l.aiNotAdvice, l.aiSuggestions]) {
+        expect(find.text(t), findsOneWidget, reason: t);
+      }
+      if (lang == 'ar') expect(Directionality.of(tester.element(find.byType(CoachSheet))), TextDirection.rtl);
+    });
+  }
+
+  test('AI errors in plain words', () {
+    final l = lookupL(const Locale('en'));
+    expect(aiError(l, const AiException('quota')), l.aiQuota);
+    expect(aiError(l, const AiException('noKey')), l.aiNoKey);
+    expect(aiError(l, const AiException('offline')), l.noInternet);
+    expect(aiError(l, StateError('x')), l.aiFailed);
+  });
 
   test('upgrade from 1.1.0: saved settings or a login skip the first-run guide', () async {
     SharedPreferences.setMockInitialValues({'settings': '{"amount":3}'});

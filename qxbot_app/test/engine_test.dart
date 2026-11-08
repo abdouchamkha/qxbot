@@ -107,7 +107,7 @@ void main() {
       'preEntryMs': 300, 'overlap': true, 'minPayout': 85, 'stopLoss': 10, 'takeProfit': 5,
     };
     final c = Settings.fromJson(old);
-    expect(c.toJson(), {...old, 'minPayout': 85.0, 'stopLoss': 10.0, 'takeProfit': 5.0});
+    expect(c.toJson(), {...old, 'minPayout': 85.0, 'stopLoss': 10.0, 'takeProfit': 5.0, 'ai': true}); // new keys: defaults
     expect(Settings.fromJson({}).toJson(), Settings().toJson()); // missing keys = defaults
   });
 }

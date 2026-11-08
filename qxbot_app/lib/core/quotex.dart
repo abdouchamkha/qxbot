@@ -168,6 +168,40 @@ class QuotexClient {
     chart = asset;
   }
 
+  var _historyIndex = DateTime.now().millisecondsSinceEpoch;
+
+  /// 1-minute candles of [asset] from [from] up to now (unix s), keyed by open time, via `history/load`.
+  /// Read-only, no order settings changed (no settings/apply). Quotex only answers for a subscribed pair, so this
+  /// sends `instruments/update` first (verified on demo 2026-11-08: no reply without it) and then marks the chart
+  /// unknown, so the engine shows its pair again before its next direct order (run it under the engine's chart lock).
+  /// Reply: `{asset, index, data: [{time, open, close, high, low, ...}, ...]}` (older form: lists).
+  Future<Map<int, ({int time, double open, double close})>> candles(String asset, int from,
+      {Duration timeout = const Duration(seconds: 10)}) async {
+    final out = <int, ({int time, double open, double close})>{};
+    var end = (clock.now()).floor();
+    emit('instruments/update', {'asset': asset, 'period': 60});
+    chart = null;
+    for (var batch = 0; end > from && batch < 20; batch++) {
+      final index = ++_historyIndex;
+      final reply = next((n, d) => d is Map && d['asset'] == asset && d['index'] == index, timeout);
+      emit('history/load', {'asset': asset, 'index': index, 'time': end, 'offset': 12000, 'period': 60});
+      final data = (await reply)?.$2 as Map?;
+      final rows = (data?['data'] ?? data?['candles']) as List?;
+      if (rows == null || rows.isEmpty) break;
+      var oldest = end;
+      for (final c in rows) {
+        final (t, o, cl) = c is Map ? (c['time'], c['open'], c['close']) : c is List && c.length >= 3 ? (c[0], c[1], c[2]) : (null, null, null);
+        if (t is num && o is num && cl is num) {
+          out[t.toInt()] = (time: t.toInt(), open: o.toDouble(), close: cl.toDouble());
+          if (t < oldest) oldest = t.toInt();
+        }
+      }
+      if (oldest >= end) break; // nothing older came back
+      end = oldest;
+    }
+    return out;
+  }
+
   /// Wait for the first event matching [test] (or time out -> null).
   Future<(String, dynamic)?> next(bool Function(String name, dynamic data) test, Duration timeout) {
     final c = Completer<(String, dynamic)?>();

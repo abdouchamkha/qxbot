@@ -1449,6 +1449,276 @@ abstract class L {
   /// In en, this message translates to:
   /// **'its minute started {seconds} s ago (phone was asleep); a late entry is worse than none'**
   String rLate(String seconds);
+
+  /// No description provided for @backtest.
+  ///
+  /// In en, this message translates to:
+  /// **'Backtest'**
+  String get backtest;
+
+  /// No description provided for @backtestTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Backtest a list'**
+  String get backtestTitle;
+
+  /// No description provided for @backtestIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Checks how the list\'s signals would have done in the last 24 h, on Quotex 1-minute candles. No trade is placed.'**
+  String get backtestIntro;
+
+  /// No description provided for @tryTimezones.
+  ///
+  /// In en, this message translates to:
+  /// **'Try several timezones (UTC-3, UTC+1, UTC+6)'**
+  String get tryTimezones;
+
+  /// No description provided for @tryTimezonesSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Finds the timezone the channel really uses'**
+  String get tryTimezonesSub;
+
+  /// No description provided for @runBacktest.
+  ///
+  /// In en, this message translates to:
+  /// **'Run backtest'**
+  String get runBacktest;
+
+  /// No description provided for @backtesting.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading candles...'**
+  String get backtesting;
+
+  /// No description provided for @noPastSignals.
+  ///
+  /// In en, this message translates to:
+  /// **'No signals found in this list.'**
+  String get noPastSignals;
+
+  /// No description provided for @timesReadAs.
+  ///
+  /// In en, this message translates to:
+  /// **'Times read as {tz}'**
+  String timesReadAs(String tz);
+
+  /// No description provided for @bestTz.
+  ///
+  /// In en, this message translates to:
+  /// **'best'**
+  String get bestTz;
+
+  /// No description provided for @btWinRate.
+  ///
+  /// In en, this message translates to:
+  /// **'Win rate {withGale} with martingale · {noGale} without'**
+  String btWinRate(String withGale, String noGale);
+
+  /// No description provided for @btCounts.
+  ///
+  /// In en, this message translates to:
+  /// **'{wins} won · {losses} lost · {draws} draw · {nodata} no data'**
+  String btCounts(String wins, String losses, String draws, String nodata);
+
+  /// No description provided for @btNet.
+  ///
+  /// In en, this message translates to:
+  /// **'Net {net} at {amount} per trade (your settings, current payouts)'**
+  String btNet(String net, String amount);
+
+  /// No description provided for @noData.
+  ///
+  /// In en, this message translates to:
+  /// **'no data'**
+  String get noData;
+
+  /// No description provided for @passedSignals.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 signal already passed: backtest it} other{{count} signals already passed: backtest them}}'**
+  String passedSignals(int count);
+
+  /// No description provided for @readWithAi.
+  ///
+  /// In en, this message translates to:
+  /// **'Read with AI'**
+  String get readWithAi;
+
+  /// No description provided for @aiReading.
+  ///
+  /// In en, this message translates to:
+  /// **'AI is reading the list...'**
+  String get aiReading;
+
+  /// No description provided for @aiReadNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Read by AI: check every line before you start.'**
+  String get aiReadNote;
+
+  /// No description provided for @aiRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 line ignored (pair or time not valid)} other{{count} lines ignored (pair or time not valid)}}'**
+  String aiRejected(int count);
+
+  /// No description provided for @aiNothing.
+  ///
+  /// In en, this message translates to:
+  /// **'The AI found no signals in this text.'**
+  String get aiNothing;
+
+  /// No description provided for @noSignalsShort.
+  ///
+  /// In en, this message translates to:
+  /// **'No signals understood in this text.'**
+  String get noSignalsShort;
+
+  /// No description provided for @aiAnalysis.
+  ///
+  /// In en, this message translates to:
+  /// **'AI analysis'**
+  String get aiAnalysis;
+
+  /// No description provided for @aiAnalyzing.
+  ///
+  /// In en, this message translates to:
+  /// **'AI is looking at your results...'**
+  String get aiAnalyzing;
+
+  /// No description provided for @aiWorks.
+  ///
+  /// In en, this message translates to:
+  /// **'What works'**
+  String get aiWorks;
+
+  /// No description provided for @aiLoses.
+  ///
+  /// In en, this message translates to:
+  /// **'What loses'**
+  String get aiLoses;
+
+  /// No description provided for @aiMartingale.
+  ///
+  /// In en, this message translates to:
+  /// **'Martingale'**
+  String get aiMartingale;
+
+  /// No description provided for @aiSuggestions.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggestions'**
+  String get aiSuggestions;
+
+  /// No description provided for @aiNotAdvice.
+  ///
+  /// In en, this message translates to:
+  /// **'AI summary of your own numbers, not financial advice.'**
+  String get aiNotAdvice;
+
+  /// No description provided for @aiFrom.
+  ///
+  /// In en, this message translates to:
+  /// **'From {time}'**
+  String aiFrom(String time);
+
+  /// No description provided for @refresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get refresh;
+
+  /// No description provided for @aiNoKey.
+  ///
+  /// In en, this message translates to:
+  /// **'No AI key. Add one in Settings > AI.'**
+  String get aiNoKey;
+
+  /// No description provided for @aiBadKey.
+  ///
+  /// In en, this message translates to:
+  /// **'The AI key was refused. Check it in Settings > AI.'**
+  String get aiBadKey;
+
+  /// No description provided for @aiQuota.
+  ///
+  /// In en, this message translates to:
+  /// **'AI limit reached for now (free quota). Try again later.'**
+  String get aiQuota;
+
+  /// No description provided for @aiTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'The AI took too long. Try again.'**
+  String get aiTimeout;
+
+  /// No description provided for @aiFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The AI could not answer. Try again.'**
+  String get aiFailed;
+
+  /// No description provided for @aiNoPairs.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to Quotex first (the AI needs the pair list).'**
+  String get aiNoPairs;
+
+  /// No description provided for @aiSection.
+  ///
+  /// In en, this message translates to:
+  /// **'AI (Gemini)'**
+  String get aiSection;
+
+  /// No description provided for @aiSwitch.
+  ///
+  /// In en, this message translates to:
+  /// **'AI help'**
+  String get aiSwitch;
+
+  /// No description provided for @aiSwitchSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Read hard lists and explain your results. Only the list text and totals are sent to Google, never your login.'**
+  String get aiSwitchSub;
+
+  /// No description provided for @aiKeyBuiltIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Using the built-in key'**
+  String get aiKeyBuiltIn;
+
+  /// No description provided for @aiKeyOwn.
+  ///
+  /// In en, this message translates to:
+  /// **'Using your own key'**
+  String get aiKeyOwn;
+
+  /// No description provided for @aiKeyNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No key: AI is off'**
+  String get aiKeyNone;
+
+  /// No description provided for @aiKeyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Gemini API key (optional)'**
+  String get aiKeyLabel;
+
+  /// No description provided for @save.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get save;
+
+  /// No description provided for @clear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get clear;
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

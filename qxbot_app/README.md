@@ -24,6 +24,38 @@ the background setup once.
   pending orders, entry timing, overlap and minimum payout.
 - **Details** (receipt icon, top bar): the raw log (orders, delays, skips) and the clock line, for diagnosis.
 
+## Backtest and AI (v1.3)
+- **Backtest** (Home, next to "Type or edit the list"; also offered when a pasted list has signals whose time
+  already passed): every signal of the list at its latest time in the last 24 h is scored on Quotex 1-minute
+  candles, as the desktop bot does (`bot.py backtest_result / past_signals`, ported in `lib/core/backtest.dart`):
+  open vs close in the signal direction = WIN / LOSS / DRAW; a loss goes to the next candle (WIN G1), equal
+  close = draw. The list is scored with at least one martingale step, so the result shows the win rate with and
+  without martingale, W/L/D/no data, and the net for your amount / multiplier at each pair's current payout.
+  Timezone: the one written in the list, else the setting; "Try several timezones" also runs UTC-3, UTC+1,
+  UTC+6 and marks the best (to find the channel's real timezone). Read-only, no trade.
+  Candles: `history/load` `{asset, index, time, offset: 12000, period: 60}` -> `{asset, index, data: [{time,
+  open, close, ...}]}`, ~200 candles per request, walked back to the oldest signal. Quotex only answers for a
+  subscribed pair (verified on demo: no reply without `instruments/update`), so the request first sends
+  `instruments/update` (no `settings/apply`), runs under the engine's chart lock and marks the chart unknown,
+  so the next direct order shows its pair again. Measured: 637 candles (10.5 h) in 6.5 s.
+- **AI (Google Gemini, `gemini-3.1-flash-lite`, one constant in `lib/core/ai.dart`)**, REST
+  `v1beta/models/{model}:generateContent` with `x-goog-api-key`, JSON output with a response schema:
+  - *Read with AI*: offered in the paste preview and the editor when the rule parser finds no signal or has
+    lines it doesn't understand. Sends the raw text, the Quotex pair list (symbol = label) and the default
+    timezone. Every item is validated (symbol must be on Quotex, HH:MM, call/put, 5..14400 s, timezone
+    UTC-12..+14) before it shows in the normal preview with "Read by AI: check every line". Never starts by itself.
+  - *AI analysis* (Results tab, Backtest screen): sends aggregated numbers only (per pair, per local hour, per
+    martingale step, totals, drawdown, payout skips, your settings, or the backtest summary), never the token,
+    email, trade ids or account. Short answer in the app language: summary, what works, what loses,
+    martingale, suggestions, plus "not financial advice". The last answer is cached (shown at once; Refresh asks again).
+  - Calls are user-triggered only. Errors in plain words: no key, key refused, free quota reached (429),
+    offline, timeout. The app works fully without AI (Settings > AI switch).
+  - Key: built in at build time from `qxbot_app/.env` (`GEMINI_API_KEY=...`, gitignored, never committed):
+    `flutter build apk --release --dart-define-from-file=.env`. Settings > AI takes your own key instead (secure storage).
+  - Model choice (2026-11-08, live): gemini-2.5-flash-lite answers 404 (retired); gemini-flash-lite-latest now
+    points to 3.5; 3.1-flash-lite read a messy Portuguese/emoji list correctly (exact `_otc` symbols, timezone
+    found, fake pair left out) in 0.8-1.1 s; coach 1.3-1.6 s.
+
 ## Background (v1.2)
 **Root cause of "stops in the background" (v1.1):** the engine runs in the main Dart isolate, i.e. inside the
 Activity's Flutter engine, and `FlutterActivity` destroys that engine when the activity is destroyed. Back on
@@ -66,8 +98,11 @@ Per brand (shown in the app in English and Arabic):
 export JAVA_HOME=~/sdk/jdk ANDROID_HOME=~/sdk/android PATH=~/sdk/flutter/bin:~/sdk/jdk/bin:$PATH
 cd qxbot_app
 flutter test                    # parser + engine tests (pure Dart core)
-flutter build apk --release     # build/app/outputs/flutter-apk/app-release.apk (debug signing)
+flutter build apk --release --dart-define-from-file=.env   # APK with the built-in Gemini key (debug signing)
 dart run tool/cli.dart TOKEN_FILE info    # demo check: balance + pairs
+dart run tool/cli.dart TOKEN_FILE candles EURUSD_otc 600   # read candles (no trade)
+dart run tool/cli.dart TOKEN_FILE backtest LIST_FILE [TZH] # backtest a list file (no trade)
+set -a; . ./.env; set +a; dart run tool/ai.dart TOKEN_FILE  # live AI check (key never printed)
 dart run tool/cli.dart TOKEN_FILE trade   # demo check: one $1 direct + one $1 pending order (isDemo=1 only)
 ```
 
@@ -128,6 +163,14 @@ resyncs); phone clocks drift by microseconds per second, which the 60 s window a
 - `flutter test`: 23 tests (parser port of every `test_signals.py` case + `test_bot.py` parse tests, engine
   decisions, a widget smoke test of all tabs).
 
+## Verified v1.3 (2026-11-08, PC only, no trade)
+- `flutter analyze` clean; `flutter test`: 56 tests (adds backtest scoring incl. M2 and no data, summary with and
+  without martingale and net, past signals with forced timezone, AI answer validation (unknown pair, bad time,
+  direction, duration, timezone rejected), prompts without token/email/ids, coach answer cleaning, the
+  preview's AI and backtest offers, AI switch off, backtest / AI analysis screens in English and Arabic).
+- Live on the demo account (read-only): `cli.dart candles` 637 candles in 6.5 s; `cli.dart backtest` of a 5-signal
+  list: 3 WIN, 2 LOSS. `tool/ai.dart`: list reader 1.1 s, coach 1.6 s (English) / 1.3 s (Arabic), gemini-3.1-flash-lite.
+
 ## Verified v1.2 (2026-11-08, PC only)
 - `flutter analyze` clean; `flutter test`: 45 tests (adds late wake-up skip, reconnect resync, 1.1.0 settings
   load, upgrade skips the guide, Home/Results/Settings/Details and the first-run guide in English and Arabic,
@@ -138,6 +181,7 @@ resyncs); phone clocks drift by microseconds per second, which the 60 s window a
 - No trade placed (another agent tests on the same demo account); the order code is unchanged.
 
 ## Not verified
+- v1.3 on a phone: backtest and AI screens with a live connection; the AI quota (429) message.
 - v1.2 on a phone: Back / swipe-away keep trading, screen off for hours, the OEM setup screens per brand, the
   Doze late-skip in real sleep (test: `adb shell dumpsys deviceidle force-idle`), the upgrade from 1.1.0 keeping
   the login.

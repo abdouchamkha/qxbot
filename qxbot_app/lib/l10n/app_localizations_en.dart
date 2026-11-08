@@ -846,4 +846,170 @@ class LEn extends L {
   String rLate(String seconds) {
     return 'its minute started $seconds s ago (phone was asleep); a late entry is worse than none';
   }
+
+  @override
+  String get backtest => 'Backtest';
+
+  @override
+  String get backtestTitle => 'Backtest a list';
+
+  @override
+  String get backtestIntro =>
+      'Checks how the list\'s signals would have done in the last 24 h, on Quotex 1-minute candles. No trade is placed.';
+
+  @override
+  String get tryTimezones => 'Try several timezones (UTC-3, UTC+1, UTC+6)';
+
+  @override
+  String get tryTimezonesSub => 'Finds the timezone the channel really uses';
+
+  @override
+  String get runBacktest => 'Run backtest';
+
+  @override
+  String get backtesting => 'Loading candles...';
+
+  @override
+  String get noPastSignals => 'No signals found in this list.';
+
+  @override
+  String timesReadAs(String tz) {
+    return 'Times read as $tz';
+  }
+
+  @override
+  String get bestTz => 'best';
+
+  @override
+  String btWinRate(String withGale, String noGale) {
+    return 'Win rate $withGale with martingale · $noGale without';
+  }
+
+  @override
+  String btCounts(String wins, String losses, String draws, String nodata) {
+    return '$wins won · $losses lost · $draws draw · $nodata no data';
+  }
+
+  @override
+  String btNet(String net, String amount) {
+    return 'Net $net at $amount per trade (your settings, current payouts)';
+  }
+
+  @override
+  String get noData => 'no data';
+
+  @override
+  String passedSignals(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count signals already passed: backtest them',
+      one: '1 signal already passed: backtest it',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get readWithAi => 'Read with AI';
+
+  @override
+  String get aiReading => 'AI is reading the list...';
+
+  @override
+  String get aiReadNote => 'Read by AI: check every line before you start.';
+
+  @override
+  String aiRejected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lines ignored (pair or time not valid)',
+      one: '1 line ignored (pair or time not valid)',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get aiNothing => 'The AI found no signals in this text.';
+
+  @override
+  String get noSignalsShort => 'No signals understood in this text.';
+
+  @override
+  String get aiAnalysis => 'AI analysis';
+
+  @override
+  String get aiAnalyzing => 'AI is looking at your results...';
+
+  @override
+  String get aiWorks => 'What works';
+
+  @override
+  String get aiLoses => 'What loses';
+
+  @override
+  String get aiMartingale => 'Martingale';
+
+  @override
+  String get aiSuggestions => 'Suggestions';
+
+  @override
+  String get aiNotAdvice =>
+      'AI summary of your own numbers, not financial advice.';
+
+  @override
+  String aiFrom(String time) {
+    return 'From $time';
+  }
+
+  @override
+  String get refresh => 'Refresh';
+
+  @override
+  String get aiNoKey => 'No AI key. Add one in Settings > AI.';
+
+  @override
+  String get aiBadKey => 'The AI key was refused. Check it in Settings > AI.';
+
+  @override
+  String get aiQuota =>
+      'AI limit reached for now (free quota). Try again later.';
+
+  @override
+  String get aiTimeout => 'The AI took too long. Try again.';
+
+  @override
+  String get aiFailed => 'The AI could not answer. Try again.';
+
+  @override
+  String get aiNoPairs =>
+      'Connect to Quotex first (the AI needs the pair list).';
+
+  @override
+  String get aiSection => 'AI (Gemini)';
+
+  @override
+  String get aiSwitch => 'AI help';
+
+  @override
+  String get aiSwitchSub =>
+      'Read hard lists and explain your results. Only the list text and totals are sent to Google, never your login.';
+
+  @override
+  String get aiKeyBuiltIn => 'Using the built-in key';
+
+  @override
+  String get aiKeyOwn => 'Using your own key';
+
+  @override
+  String get aiKeyNone => 'No key: AI is off';
+
+  @override
+  String get aiKeyLabel => 'Your Gemini API key (optional)';
+
+  @override
+  String get save => 'Save';
+
+  @override
+  String get clear => 'Clear';
 }

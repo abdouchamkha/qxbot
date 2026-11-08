@@ -10,7 +10,9 @@ import '../core/engine.dart';
 import '../core/parser.dart';
 import '../format.dart';
 import '../l10n/app_localizations.dart';
+import 'ai.dart';
 import 'background.dart';
+import 'backtest.dart';
 import 'common.dart';
 import 'results.dart';
 
@@ -44,12 +46,24 @@ class HomePage extends StatelessWidget {
           label: Text(l.pasteBig, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
         ),
         gap8,
-        TextButton.icon(
-          style: TextButton.styleFrom(minimumSize: const Size.fromHeight(48), foregroundColor: textMid),
-          onPressed: () => openEditor(context, app),
-          icon: const Icon(Icons.edit_note),
-          label: Text(l.typeList),
-        ),
+        Row(children: [
+          Expanded(
+            child: TextButton.icon(
+              style: TextButton.styleFrom(minimumSize: const Size.fromHeight(48), foregroundColor: textMid),
+              onPressed: () => openEditor(context, app),
+              icon: const Icon(Icons.edit_note),
+              label: Text(l.typeList, textAlign: TextAlign.center),
+            ),
+          ),
+          Expanded(
+            child: TextButton.icon(
+              style: TextButton.styleFrom(minimumSize: const Size.fromHeight(48), foregroundColor: textMid),
+              onPressed: () => openBacktest(context, app),
+              icon: const Icon(Icons.history),
+              label: Text(l.backtest),
+            ),
+          ),
+        ]),
       ],
       gap16,
       if (app.running && upcoming.isNotEmpty) ...[
@@ -183,19 +197,21 @@ Future<void> stopWithConfirm(BuildContext context, AppState app) async {
 }
 
 /// Starts [text] after a confirmation when the account is real. Returns true when trading started.
-Future<bool> startWithConfirm(BuildContext context, AppState app, String text, int count) async {
+/// Starts [sigs] (from [text]) after a confirmation when the account is real. Returns true when trading started.
+Future<bool> startWithConfirm(BuildContext context, AppState app, String text, List<Signal> sigs) async {
   final l = L.of(context);
   if (!app.cfg.demo &&
-      !await confirm(context, l.realStartTitle, l.realStartBody(ltr(count), dollars(app.cfg.amount)), l.startReal, danger: true)) {
+      !await confirm(context, l.realStartTitle, l.realStartBody(ltr(sigs.length), dollars(app.cfg.amount)), l.startReal,
+          danger: true)) {
     return false;
   }
   app.prefs.setString('lastList', text);
-  final n = app.start(text);
+  final n = app.startSignals(sigs);
   if (context.mounted) snack(context, l.scheduled(n));
   return n > 0;
 }
 
-/// One tap: read the clipboard, parse it, show the preview with a Start button.
+/// One tap: read the clipboard, parse it, show the preview (Start, Read with AI, backtest passed signals).
 Future<void> pasteAndPreview(BuildContext context, AppState app) async {
   final l = L.of(context);
   var text = '';
@@ -204,23 +220,30 @@ Future<void> pasteAndPreview(BuildContext context, AppState app) async {
   } catch (_) {}
   if (!context.mounted) return;
   if (text.trim().isEmpty) return snack(context, l.clipboardEmpty);
-  final unknown = <String>[];
-  final sigs = app.parse(text, unknown: unknown);
-  if (sigs.isEmpty) {
+  final unknown = <String>[], passed = <Signal>[];
+  final sigs = app.parse(text, unknown: unknown, passed: passed);
+  if (sigs.isEmpty && passed.isEmpty && !app.aiReady) {
     snack(context, l.noSignalsInText);
     return openEditor(context, app, text);
   }
-  await showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: card,
-    showDragHandle: true,
-    builder: (_) => PreviewSheet(app, text, sigs, unknown),
-  );
+  await showPreview(context, app, text, sigs, unknown, passed);
 }
+
+Future<void> showPreview(BuildContext context, AppState app, String text, List<Signal> sigs, List<String> unknown,
+        List<Signal> passed, {bool readWithAi = false}) =>
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: card,
+      showDragHandle: true,
+      builder: (_) => PreviewSheet(app, text, sigs, unknown, passed, readWithAi: readWithAi),
+    );
 
 void openEditor(BuildContext context, AppState app, [String? text]) =>
     Navigator.push(context, MaterialPageRoute(builder: (_) => ListEditorPage(app, text)));
+
+void openBacktest(BuildContext context, AppState app, [String? text]) =>
+    Navigator.push(context, MaterialPageRoute(builder: (_) => BacktestPage(app, text: text)));
 
 /// Settings that apply to the list, in one line each.
 List<String> runSummary(L l, Settings c) => [
@@ -228,16 +251,52 @@ List<String> runSummary(L l, Settings c) => [
       c.gales > 0 ? l.martingaleOn(ltr(plainNumber(c.galeMultiplier)), ltr(c.gales)) : l.martingaleOffShort,
     ];
 
-class PreviewSheet extends StatelessWidget {
+class PreviewSheet extends StatefulWidget {
   final AppState app;
   final String text;
-  final List<Signal> sigs;
+  final List<Signal> sigs, passed;
   final List<String> unknown;
-  const PreviewSheet(this.app, this.text, this.sigs, this.unknown, {super.key});
+  final bool readWithAi; // run the AI reader at once (from the editor's button)
+  const PreviewSheet(this.app, this.text, this.sigs, this.unknown, this.passed, {super.key, this.readWithAi = false});
+  @override
+  State<PreviewSheet> createState() => _PreviewSheetState();
+}
+
+class _PreviewSheetState extends State<PreviewSheet> {
+  late var sigs = widget.sigs, passed = widget.passed, unknown = widget.unknown;
+  bool byAi = false, busy = false;
+  String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.readWithAi) WidgetsBinding.instance.addPostFrameCallback((_) => _ai());
+  }
+
+  /// AI reading replaces the rule parser's result; the user still checks it and taps Start (never automatic).
+  Future<void> _ai() async {
+    final l = L.of(context);
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      final r = await widget.app.aiReadList(widget.text);
+      sigs = r.signals;
+      passed = r.passed;
+      unknown = r.rejected;
+      byAi = true;
+      if (sigs.isEmpty && passed.isEmpty) error = l.aiNothing;
+    } catch (e) {
+      error = aiError(l, e);
+    }
+    if (mounted) setState(() => busy = false);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final l = L.of(context);
+    final l = L.of(context), app = widget.app;
+    final offerAi = app.aiReady && !byAi && (sigs.isEmpty || unknown.isNotEmpty);
     return SafeArea(
       child: ConstrainedBox(
         constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.85),
@@ -247,20 +306,56 @@ class PreviewSheet extends StatelessWidget {
             Text(l.signalsFound(sigs.length), style: titleStyle),
             gap4,
             for (final s in runSummary(l, app.cfg)) Text(s, style: const TextStyle(color: textMid, fontSize: 14)),
+            if (byAi && sigs.isNotEmpty) ...[
+              gap8,
+              Text(l.aiReadNote, style: const TextStyle(color: blue, fontWeight: FontWeight.w700)),
+            ],
             gap12,
             Flexible(
               child: ListView(shrinkWrap: true, children: [
+                if (sigs.isEmpty && !busy) Text(l.noSignalsShort, style: const TextStyle(color: textMid, fontSize: 15)),
                 for (final s in sigs) SignalTile(s),
-                for (final u in unknown) _UnknownLine(u),
+                if (byAi && unknown.isNotEmpty)
+                  Text(l.aiRejected(unknown.length), style: const TextStyle(color: amber))
+                else
+                  for (final u in unknown) _UnknownLine(u),
               ]),
             ),
+            if (busy)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Row(children: [
+                  const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                  gap12,
+                  Text(l.aiReading, style: const TextStyle(color: textMid)),
+                ]),
+              ),
+            if (error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(error!, style: const TextStyle(color: amber))),
+            if (offerAi && !busy)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: OutlinedButton.icon(
+                    onPressed: _ai, icon: const Icon(Icons.auto_awesome, color: blue), label: Text(l.readWithAi)),
+              ),
+            if (passed.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    openBacktest(context, app, widget.text);
+                  },
+                  icon: const Icon(Icons.history),
+                  label: Text(l.passedSignals(passed.length)),
+                ),
+              ),
             gap12,
             Row(children: [
               OutlinedButton(
                 style: OutlinedButton.styleFrom(minimumSize: const Size(96, 56)),
                 onPressed: () {
                   Navigator.pop(context);
-                  openEditor(context, app, text);
+                  openEditor(context, app, widget.text);
                 },
                 child: Text(l.edit),
               ),
@@ -268,10 +363,12 @@ class PreviewSheet extends StatelessWidget {
               Expanded(
                 child: FilledButton.icon(
                   style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
-                  onPressed: app.engine == null
+                  onPressed: app.engine == null || sigs.isEmpty || busy || app.running
                       ? null
                       : () async {
-                          if (await startWithConfirm(context, app, text, sigs.length) && context.mounted) Navigator.pop(context);
+                          if (await startWithConfirm(context, app, widget.text, sigs) && context.mounted) {
+                            Navigator.pop(context);
+                          }
                         },
                   icon: const Icon(Icons.play_arrow_rounded),
                   label: Text(app.engine == null ? l.connectFirst : l.startTrading(sigs.length),
@@ -320,12 +417,14 @@ class _ListEditorPageState extends State<ListEditorPage> {
   final text = TextEditingController();
   List<Signal> preview = [];
   List<String> unknown = [];
+  int passedCount = 0;
 
   void _parse() {
-    final u = <String>[];
+    final u = <String>[], p = <Signal>[];
     setState(() {
-      preview = widget.app.parse(text.text, unknown: u);
+      preview = widget.app.parse(text.text, unknown: u, passed: p);
       unknown = u;
+      passedCount = p.length;
     });
   }
 
@@ -375,13 +474,31 @@ class _ListEditorPageState extends State<ListEditorPage> {
           gap8,
           for (final s in preview) SignalTile(s),
           for (final u in unknown) _UnknownLine(u),
+          if (app.aiReady && text.text.trim().isNotEmpty && (preview.isEmpty || unknown.isNotEmpty))
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: OutlinedButton.icon(
+                onPressed: () => showPreview(context, app, text.text, preview, unknown, const [], readWithAi: true),
+                icon: const Icon(Icons.auto_awesome, color: blue),
+                label: Text(l.readWithAi),
+              ),
+            ),
+          if (passedCount > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: OutlinedButton.icon(
+                onPressed: () => openBacktest(context, app, text.text),
+                icon: const Icon(Icons.history),
+                label: Text(l.passedSignals(passedCount)),
+              ),
+            ),
           gap16,
           FilledButton.icon(
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
             onPressed: preview.isEmpty || app.engine == null || app.running
                 ? null
                 : () async {
-                    if (await startWithConfirm(context, app, text.text, preview.length) && context.mounted) {
+                    if (await startWithConfirm(context, app, text.text, preview) && context.mounted) {
                       Navigator.pop(context);
                     }
                   },
