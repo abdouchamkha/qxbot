@@ -52,11 +52,21 @@ Directions: CALL/PUT, BUY/SELL, UP/DOWN, HIGHER/LOWER, COMPRA/VENDA, شراء/ب
 - 15-70s before each signal: connection check (re-login if dead), pair exists and is open, payout >= minimum.
 - Errors inside a trade are printed, never silent; reconnects never run twice at once.
 
+## Desktop app (Windows GUI)
+`desktop/`: the same engine (`bot.Bot`) behind a local web UI on 127.0.0.1, shown in a native window (pywebview on Edge WebView2; the default browser if WebView2 is missing). Login with PIN box, live signal preview, Start/Stop, countdown to the next trade, result cards, details log, stats, Quotex history, backtest, settings and profiles from `config.json`, English/Arabic. Every `print` of the engine reaches the GUI log and `qxbot.log`. Run it from source with `.venv/bin/python -m desktop` (`--browser` for no native window); terminal mode is still `bot.py`.
+
+Rebuild the Windows zip from WSL: `desktop/build_windows.sh` (copies the code into `dist\QXBot\`, installs the pywebview wheels into the embedded Python, compiles `QXBot.exe` with the C# compiler built into Windows, and zips without private files).
+
+### For testers / للمختبرين
+**English.** Download `QXBot-windows.zip`, right-click > Extract All, open the `QXBot` folder, double-click **QXBot.exe** (if Windows shows "Windows protected your PC": More info > Run anyway). Sign in with your Quotex email and password and choose Demo; a browser window logs in by itself and closes. If Quotex emails a PIN, type it in the box QXBot shows. Paste a signal list on the Signals page, check the preview, click Start trading. Home shows the balance, today's profit, the next trade with a countdown and a big Stop button; Results shows every trade. Keep QXBot open while trading.
+
+**العربية.** نزّل `QXBot-windows.zip`، زر الفأرة الأيمن > استخراج الكل، افتح مجلد `QXBot` واضغط مرتين على **QXBot.exe** (إذا ظهر "Windows protected your PC": More info ثم Run anyway). سجّل الدخول ببريد وكلمة سر Quotex واختر الحساب التجريبي؛ تفتح نافذة متصفح وتسجّل الدخول وحدها ثم تُغلق. إذا أرسل Quotex رمز PIN إلى بريدك، اكتبه في المربع الذي يظهر في QXBot. الصق قائمة الإشارات في صفحة الإشارات، راجع المعاينة، ثم اضغط ابدأ التداول. الرئيسية تعرض الرصيد وربح اليوم والصفقة القادمة مع عدّاد وزر إيقاف كبير؛ صفحة النتائج تعرض كل صفقة. اترك QXBot مفتوحاً أثناء التداول.
+
 ## Windows build (no Python needed)
-`C:\Users\dz\qxbot-build\QXBot-windows.zip`: embedded Python 3.12 + deps + `start.bat`. To rebuild after changing the code, copy `bot.py` and `signals.py` into `dist\QXBot\` and re-zip.
+`C:\Users\dz\qxbot-build\QXBot-windows.zip`: embedded Python 3.12 + deps, `QXBot.exe` (GUI) and `QXBot-terminal.bat` (terminal mode). Rebuild with `desktop/build_windows.sh`.
 
 ## Notes
-- Login uses a real Chromium browser via Patchright (Windows: Edge, then Chrome, then Brave). If Quotex sends a PIN, type it in the terminal. The login is kept in `login_profile/`.
+- Login uses a real Chromium browser via Patchright (Windows: Edge, then Chrome, then Brave). If Quotex sends a PIN, type it in the terminal (or the GUI's PIN box). The login is kept in `login_profile/`.
 - The websocket uses the Quotex app User-Agent `Quotex/1.0` (Cloudflare 403s browser UAs there) and the same proxy as the browser. Never change the proxy without deleting `login_profile/`.
 - `open_time` rejection = the pair is closed right now (Quotex closes some OTC pairs while the real market is open).
 - `login_profile/`, `session.json`, `config.json` and `trades.csv` hold your session and history. Keep them private.

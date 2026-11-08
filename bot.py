@@ -320,6 +320,7 @@ class Bot:
         self.pending_reply: asyncio.Future | None = None
         self.pending_opened: dict[str, asyncio.Future] = {}  # ticket -> open result
         self.limit_said = False
+        self.clock, self.clock_ok = "", None  # last clock check, for the GUI
 
     @property
     def ping(self) -> float:
@@ -404,14 +405,17 @@ class Bot:
                 gaps.append(time.time() - t)
             await asyncio.sleep(0.005)
         if len(gaps) < 4:
-            print("Clock check skipped (no price ticks).")
+            self.clock = "Clock check skipped (no price ticks)."
+            print(self.clock)
             return
         gap = min(gaps[1:])  # first value is a stale tick
-        if gap < -0.1 or gap > 1.5:
-            print(f"WARNING: this PC clock looks {'behind' if gap < 0 else 'ahead'} of Quotex by about {abs(gap):.1f}s. "
-                  "Sync it (Windows: Settings > Time > Sync now; WSL: sudo hwclock -s) or entries will be off.")
+        self.clock_ok = -0.1 <= gap <= 1.5
+        if not self.clock_ok:
+            self.clock = (f"WARNING: this PC clock looks {'behind' if gap < 0 else 'ahead'} of Quotex by about {abs(gap):.1f}s. "
+                          "Sync it (Windows: Settings > Time > Sync now; WSL: sudo hwclock -s) or entries will be off.")
         else:
-            print(f"Clock OK (ticks arrive {gap * 1000:.0f}ms after Quotex stamps them).")
+            self.clock = f"Clock OK (ticks arrive {gap * 1000:.0f}ms after Quotex stamps them)."
+        print(self.clock)
 
     def _hook(self, api) -> None:
         set_event = api.event_registry.set_event
@@ -681,6 +685,13 @@ class Bot:
         await asyncio.sleep(2)
         return next((i for i in self.broker.api.instruments if i[1] == s.asset), None)
 
+    async def cancel_pending(self) -> None:
+        """Cancel every pending order Quotex holds for us (GUI Stop). Hold self.pending_lock so none is half-created."""
+        for ticket in list(self.pending_opened):
+            self.pending_opened.pop(ticket, None)
+            await self.broker.api.send_websocket_request(f'42["pending/cancel",{json.dumps({"ticket": ticket})}]')
+            print(f"  pending order {ticket} cancelled")
+
     async def report(self, s: Signal, data: dict, level: int, amount: float, signal: str, entry: str) -> None:
         _, profit = await self.broker.check_win(str(data["id"]), s.duration)
         result = "win" if profit > 0 else "loss" if profit < 0 else "draw"
@@ -694,7 +705,7 @@ class Bot:
         })
         print("  " + stats_line("Session", [r for r in self.my_trades() if r["time"] >= self.started]))
 
-    async def backtest(self, signals: list[Signal]) -> None:
+    async def backtest(self, signals: list[Signal]) -> list[tuple[Signal, str]]:
         """Score signals whose time already passed against Quotex's 1-minute candle history."""
         # shortcut: candle open/close, not the exact tick a live order would get; fine for a past-list check
         print(f"Backtest of {len(signals)} past signals (Quotex candles, gales={self.cfg['gales']}):")
@@ -715,6 +726,7 @@ class Bot:
         losses, draws = rs.count("LOSS"), sum(r.startswith("DRAW") for r in rs)
         print(f"  Backtest: {wins}W {losses}L {draws}D" + (f", {rs.count('no data')} no data" if "no data" in rs else "")
               + (f" ({wins * 100 // (wins + losses)}% won)" if wins + losses else ""))
+        return sorted(results, key=lambda x: x[0].at)
 
     async def quotex_history(self, day: str) -> list[dict]:
         """Quotex's own trade history for one day (YYYY-MM-DD, UTC), as trades.csv-style rows."""
@@ -747,7 +759,7 @@ class Bot:
 TASKS: set[asyncio.Task] = set()  # asyncio keeps only weak refs to tasks
 
 
-def spawn(coro, what: str) -> None:
+def spawn(coro, what: str) -> asyncio.Task:
     """Run in the background; an error is printed instead of silently killing the trade."""
     async def run():
         try:
@@ -757,6 +769,7 @@ def spawn(coro, what: str) -> None:
     task = asyncio.create_task(run())
     TASKS.add(task)
     task.add_done_callback(TASKS.discard)
+    return task
 
 
 async def sleep_until(t: float) -> None:
@@ -818,6 +831,46 @@ async def read_list() -> str:
             lines.append(line)
 
 
+async def backtest_list(bot: Bot, text: str, offsets: list[float], tz: timezone) -> list[tuple[str, list]]:
+    """Backtest a list once per UTC offset (none = the list's own or the profile's timezone)."""
+    names = [(i[1], i[2]) for i in bot.broker.api.instruments]
+    out = []
+    for off in offsets or [None]:
+        btz = timezone(timedelta(hours=off)) if off is not None else (list_timezone(text) or tz)
+        print(f"\n== Times read as {btz} ==")
+        try:
+            out.append((str(btz), await bot.backtest(past_signals(text, btz, datetime.now(timezone.utc), names or None,
+                                                                   force_tz=off is not None))))
+        except Exception as e:
+            print(f"  Backtest failed: {e!r}")
+    return out
+
+
+async def start_list(bot: Bot, text: str, tz: timezone) -> list[tuple[Signal, asyncio.Task]]:
+    """Parse a pasted list, backtest its passed signals, schedule the upcoming ones."""
+    if list_tz := list_timezone(text):
+        print(f"  (times read as {list_tz}, written in the list)")
+    names = [(i[1], i[2]) for i in bot.broker.api.instruments]
+    unknown: list[str] = []
+    passed: list[Signal] = []
+    signals = bot.schedule(parse_signals(text, tz, datetime.now(timezone.utc), names or None,
+                                         unknown=unknown, passed=passed))
+    for line in unknown:
+        print(f"  not understood (pair not on Quotex?): {line}")
+    if passed:
+        try:
+            await bot.backtest(passed)
+        except Exception as e:
+            print(f"  Backtest failed: {e!r}")
+    if not signals:
+        print("No upcoming signals found.")
+        return []
+    for s in signals:
+        print(f"  {s.at:%Y-%m-%d %H:%M} {s.asset:12} {s.direction.upper():4} M{s.duration // 60}")
+    print(f"Scheduled {len(signals)} trades. You can paste another list any time.")
+    return [(s, spawn(bot.run_signal(s), f"{s.at:%H:%M} {s.asset}")) for s in signals]
+
+
 async def main() -> None:
     cfg = load_settings()
     patch_pyquotex(cfg["proxy"])
@@ -845,39 +898,9 @@ async def main() -> None:
                 print("Usage: backtest   or   backtest -3 +6 5.5   (UTC offsets to try)")
                 continue
             print("Backtest: paste the list (times count as their last occurrence in the past 24h).")
-            text = await read_list()
-            names = [(i[1], i[2]) for i in bot.broker.api.instruments]
-            for off in offsets or [None]:
-                btz = timezone(timedelta(hours=off)) if off is not None else (list_timezone(text) or tz)
-                print(f"\n== Times read as {btz} ==")
-                try:
-                    await bot.backtest(past_signals(text, btz, datetime.now(timezone.utc), names or None,
-                                                    force_tz=off is not None))
-                except Exception as e:
-                    print(f"  Backtest failed: {e!r}")
+            await backtest_list(bot, await read_list(), offsets, tz)
             continue
-        if list_tz := list_timezone(text):
-            print(f"  (times read as {list_tz}, written in the list)")
-        names = [(i[1], i[2]) for i in bot.broker.api.instruments]
-        unknown: list[str] = []
-        passed: list[Signal] = []
-        signals = bot.schedule(parse_signals(text, tz, datetime.now(timezone.utc), names or None,
-                                             unknown=unknown, passed=passed))
-        for line in unknown:
-            print(f"  not understood (pair not on Quotex?): {line}")
-        if passed:
-            try:
-                await bot.backtest(passed)
-            except Exception as e:
-                print(f"  Backtest failed: {e!r}")
-        if not signals:
-            print("No upcoming signals found.")
-            continue
-        for s in signals:
-            print(f"  {s.at:%Y-%m-%d %H:%M} {s.asset:12} {s.direction.upper():4} M{s.duration // 60}")
-        print(f"Scheduled {len(signals)} trades. You can paste another list any time.")
-        for s in signals:
-            spawn(bot.run_signal(s), f"{s.at:%H:%M} {s.asset}")
+        await start_list(bot, text, tz)
 
 
 if __name__ == "__main__":
