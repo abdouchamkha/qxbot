@@ -532,4 +532,332 @@ class LAr extends L {
   String evClockWarning(String offset) {
     return 'ساعة الهاتف تختلف عن ساعة Quotex بـ $offset ثانية: يتم تصحيح التوقيت تلقائيًا';
   }
+
+  @override
+  String get tabResults => 'النتائج';
+
+  @override
+  String get details => 'التفاصيل';
+
+  @override
+  String get detailsTitle => 'التفاصيل (السجل التقني)';
+
+  @override
+  String get nextTrade => 'الصفقة التالية';
+
+  @override
+  String atTime(String time) {
+    return 'الساعة $time';
+  }
+
+  @override
+  String inCountdown(String time) {
+    return 'بعد $time';
+  }
+
+  @override
+  String get nowEntering => 'الدخول الآن';
+
+  @override
+  String get noNextTrade => 'لا توجد صفقة في الانتظار';
+
+  @override
+  String get botStoppedHint =>
+      'انسخ قائمة الإشارات من تيليجرام، ثم اضغط الزر بالأسفل.';
+
+  @override
+  String get todayProfit => 'ربح اليوم';
+
+  @override
+  String winsLosses(String wins, String losses) {
+    return '$wins رابحة · $losses خاسرة';
+  }
+
+  @override
+  String get pasteBig => 'لصق القائمة من الحافظة';
+
+  @override
+  String get typeList => 'كتابة القائمة أو تعديلها';
+
+  @override
+  String get clipboardEmpty =>
+      'الحافظة فارغة. انسخ قائمة الإشارات من تيليجرام أولًا.';
+
+  @override
+  String get noSignalsInText =>
+      'لم يتم العثور على إشارات في النص المنسوخ. انسخ القائمة كاملة (مثال: M1 EURUSD 14:30 CALL).';
+
+  @override
+  String previewSummary(String amount, String account) {
+    return '$amount لكل صفقة · الحساب $account';
+  }
+
+  @override
+  String martingaleOn(String mult, String levels) {
+    return 'مضاعفة ×$mult، حتى $levels مرات';
+  }
+
+  @override
+  String get martingaleOffShort => 'المضاعفة معطّلة';
+
+  @override
+  String get edit => 'تعديل';
+
+  @override
+  String get realStartTitle => 'التداول بأموال حقيقية؟';
+
+  @override
+  String realStartBody(String trades, String amount) {
+    return '$trades صفقات بمبلغ $amount على حسابك الحقيقي (وأكثر عند المضاعفة). الخسائر حقيقية.';
+  }
+
+  @override
+  String get startReal => 'ابدأ بأموال حقيقية';
+
+  @override
+  String get stopTitle => 'إيقاف الروبوت؟';
+
+  @override
+  String get stopBody =>
+      'ستُلغى الصفقات المنتظرة. أما الصفقات المفتوحة في Quotex فتكتمل بشكل عادي.';
+
+  @override
+  String get keepRunning => 'متابعة التشغيل';
+
+  @override
+  String get upcoming => 'القادمة';
+
+  @override
+  String get inTrade => 'في صفقة';
+
+  @override
+  String get latestResults => 'آخر النتائج';
+
+  @override
+  String get seeAll => 'عرض الكل';
+
+  @override
+  String get noResultsYet => 'لا توجد نتائج بعد. تظهر هنا بعد كل صفقة.';
+
+  @override
+  String get firstEntry => 'الدخول الأول';
+
+  @override
+  String get statistics => 'الإحصائيات';
+
+  @override
+  String get bgWarnTitle => 'التشغيل في الخلفية غير مضبوط';
+
+  @override
+  String get bgWarnBody => 'قد يتوقف التداول عند إطفاء الشاشة.';
+
+  @override
+  String get fix => 'إصلاح';
+
+  @override
+  String get loginExpired =>
+      'انتهت جلسة الدخول إلى Quotex. يرجى تسجيل الدخول مجددًا.';
+
+  @override
+  String get noInternet =>
+      'لا يوجد اتصال بالإنترنت. تحقق من الواي فاي أو بيانات الهاتف.';
+
+  @override
+  String get connectProblem =>
+      'تعذّر الوصول إلى Quotex حاليًا. جارٍ المحاولة مجددًا...';
+
+  @override
+  String get logInAgain => 'تسجيل الدخول مجددًا';
+
+  @override
+  String get retry => 'إعادة المحاولة';
+
+  @override
+  String get account => 'الحساب';
+
+  @override
+  String get logoutTitle => 'تسجيل الخروج من Quotex؟';
+
+  @override
+  String get essentials => 'الأساسيات';
+
+  @override
+  String get martingale => 'المضاعفة';
+
+  @override
+  String get martingaleSub =>
+      'بعد الخسارة، تُفتح صفقة على الشمعة التالية بمبلغ أكبر';
+
+  @override
+  String get levels => 'عدد المرات';
+
+  @override
+  String get tzHint =>
+      'المنطقة الزمنية التي تكتب بها القناة أوقاتها (ابحث عن \"UTC-3\" أعلى القائمة). إذا كُتبت في القائمة فهي المعتمدة.';
+
+  @override
+  String get dailyLimits => 'الحدود اليومية';
+
+  @override
+  String get advanced => 'خيارات متقدمة';
+
+  @override
+  String get advancedSub =>
+      'الصفقات المعلقة، توقيت الدخول، التداخل، نسبة الربح';
+
+  @override
+  String get backgroundSetup => 'إعداد التشغيل في الخلفية';
+
+  @override
+  String get backgroundSetupSub => 'استمرار التداول والشاشة مطفأة';
+
+  @override
+  String get other => 'أخرى';
+
+  @override
+  String get bgTitle => 'إبقاء QXBot يعمل';
+
+  @override
+  String get bgIntro =>
+      'يوقف أندرويد التطبيقات في الخلفية لتوفير البطارية. نفّذ هذه الخطوات مرة واحدة ليواصل QXBot التداول والشاشة مطفأة.';
+
+  @override
+  String get bgNotif => 'الإشعارات';
+
+  @override
+  String get bgNotifSub => 'تُظهر أن الروبوت يعمل، ونتيجة كل صفقة';
+
+  @override
+  String get bgBattery => 'البطارية: بدون قيود';
+
+  @override
+  String get bgBatterySub =>
+      'اضغط سماح، ثم اختر \"سماح\" أو \"عدم التحسين\" أو \"غير مقيد\"';
+
+  @override
+  String bgBrand(String brand) {
+    return 'إعدادات الهاتف ($brand)';
+  }
+
+  @override
+  String get bgBrandGeneric => 'إعدادات الهاتف';
+
+  @override
+  String get allow => 'سماح';
+
+  @override
+  String get allowed => 'مسموح';
+
+  @override
+  String get openSettings => 'فتح';
+
+  @override
+  String get bgXiaomi =>
+      'التشغيل التلقائي: فعّل QXBot. ثم معلومات التطبيق > توفير البطارية: \"بلا قيود\". وفي التطبيقات الأخيرة اسحب QXBot للأسفل لقفله.';
+
+  @override
+  String get bgHuawei =>
+      'تشغيل التطبيقات: أوقف \"الإدارة التلقائية\" لـ QXBot، ثم فعّل التشغيل التلقائي والتشغيل الثانوي والتشغيل في الخلفية.';
+
+  @override
+  String get bgOppo =>
+      'التشغيل التلقائي: فعّل QXBot. البطارية > إدارة بطارية التطبيقات > QXBot: اسمح بالنشاط في الخلفية.';
+
+  @override
+  String get bgVivo =>
+      'التشغيل في الخلفية و\"استهلاك طاقة عالٍ في الخلفية\": اسمح لـ QXBot.';
+
+  @override
+  String get bgSamsung =>
+      'البطارية > حدود الاستخدام في الخلفية > التطبيقات التي لا تدخل في وضع السكون أبدًا: أضف QXBot (واحذفه من التطبيقات النائمة).';
+
+  @override
+  String get bgOther =>
+      'معلومات التطبيق > البطارية: \"غير مقيد\". وإذا كان في هاتفك إعداد \"التشغيل التلقائي\" أو \"النشاط في الخلفية\" فاسمح لـ QXBot.';
+
+  @override
+  String get bgTips =>
+      'نصائح: اترك الهاتف على الشاحن أثناء القوائم الطويلة، ولا تغلق QXBot من التطبيقات الأخيرة.';
+
+  @override
+  String get bgPending =>
+      'معلومة مفيدة: الصفقات المعلقة (أزواج OTC، تُوضع قبل دقيقة) تكون مسجّلة في Quotex وتُفتح حتى لو كان الهاتف نائمًا. أما المضاعفة والصفقات المباشرة فتحتاج التطبيق مستيقظًا.';
+
+  @override
+  String get continueBtn => 'متابعة';
+
+  @override
+  String get later => 'لاحقًا';
+
+  @override
+  String get done => 'تم';
+
+  @override
+  String get welcome => 'مرحبًا بك في QXBot';
+
+  @override
+  String obStep(String step, String total) {
+    return 'الخطوة $step من $total';
+  }
+
+  @override
+  String get obAccountTitle => 'أي حساب؟';
+
+  @override
+  String get obAccountBody =>
+      'ابدأ بالحساب التجريبي لتجربة الروبوت بأموال التدريب. يمكنك التبديل في أي وقت من الإعدادات.';
+
+  @override
+  String get demoCardTitle => 'تجريبي (أموال للتدريب)';
+
+  @override
+  String get demoCardSub => 'مُستحسن للبداية. بدون مخاطرة.';
+
+  @override
+  String get realCardTitle => 'أموال حقيقية';
+
+  @override
+  String get realCardSub => 'تُستخدم أموالك الحقيقية.';
+
+  @override
+  String get obAmountTitle => 'المبلغ لكل صفقة';
+
+  @override
+  String obAmountBody(String amount) {
+    return 'المبلغ الذي تستخدمه كل صفقة. ومع تفعيل المضاعفة، تليها بعد الخسارة صفقة بمبلغ $amount.';
+  }
+
+  @override
+  String get obDoneTitle => 'كل شيء جاهز!';
+
+  @override
+  String get obDoneBody =>
+      'انسخ قائمة الإشارات من تيليجرام، وافتح QXBot، ثم اضغط \"لصق القائمة من الحافظة\".';
+
+  @override
+  String get goHome => 'ابدأ استخدام QXBot';
+
+  @override
+  String get next => 'التالي';
+
+  @override
+  String get back => 'رجوع';
+
+  @override
+  String get invalidAmount => 'أدخل مبلغًا لا يقل عن 1';
+
+  @override
+  String evWokeUp(String seconds) {
+    return 'كان الهاتف نائمًا لمدة $seconds ثانية: جارٍ التحقق من الاتصال والقائمة';
+  }
+
+  @override
+  String evServiceFailed(String error) {
+    return 'تعذّر تشغيل وضع الخلفية ($error). أبقِ التطبيق مفتوحًا.';
+  }
+
+  @override
+  String rLate(String seconds) {
+    return 'بدأت دقيقتها قبل $seconds ثانية (كان الهاتف نائمًا)؛ الدخول المتأخر أسوأ من عدم الدخول';
+  }
 }

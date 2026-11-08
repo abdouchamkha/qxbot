@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart' show Locale;
+import 'package:flutter/services.dart' show MethodChannel;
+import 'package:flutter/widgets.dart' show AppLifecycleListener, Locale;
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,14 +15,18 @@ import 'core/quotex.dart';
 import 'format.dart';
 import 'l10n/app_localizations.dart';
 
-/// The foreground service only keeps the app process alive (and shows results);
-/// the engine itself runs in the main isolate.
+/// The foreground service keeps the app process alive (and shows results); the engine itself runs in the
+/// main isolate, whose Flutter engine outlives the activity (see MainActivity.kt).
 @pragma('vm:entry-point')
 void startCallback() => FlutterForegroundTask.setTaskHandler(_KeepAlive());
 
 class _KeepAlive extends TaskHandler {
   @override
-  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {}
+  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
+    // Restarted by Android after the process was killed: the trading engine (and its list) is gone, so a
+    // "trading" notification would lie. Stop; the user restarts from the app.
+    if (starter == TaskStarter.system) await FlutterForegroundTask.stopService();
+  }
   @override
   void onRepeatEvent(DateTime timestamp) {}
   @override
@@ -43,6 +48,19 @@ class LogEntry {
 
 enum Conn { disconnected, connecting, connected, failed }
 
+/// What keeps the bot running in the background, as far as the app can check.
+class BgStatus {
+  final bool notifications, battery;
+  const BgStatus(this.notifications, this.battery);
+  bool get ok => notifications && battery;
+}
+
+const _system = MethodChannel('qxbot/system');
+
+/// First-run guide done? Users upgrading from 1.1.0 (saved settings or a login, no flag yet) count as done.
+bool isOnboarded(SharedPreferences prefs, String? token) =>
+    prefs.getBool('onboarded') ?? (prefs.containsKey('settings') || token != null);
+
 /// App state: token, settings, language, trade history, connection and engine.
 class AppState extends ChangeNotifier {
   static const _secure = FlutterSecureStorage();
@@ -56,6 +74,13 @@ class AppState extends ChangeNotifier {
   Conn status = Conn.disconnected;
   bool running = false;
   Timer? _timer;
+  String? connectError; // raw error of the last failed connect (the UI shows it in plain words)
+
+  /// First-run guide finished (1.1.0 users with settings or a login count as done).
+  bool onboarded = true;
+  bool bgSetupSeen = true;
+  BgStatus? bg; // null until checked (or not on Android)
+  String brand = '';
 
   /// '' = follow the phone, or 'en' / 'ar'.
   String lang = '';
@@ -71,6 +96,8 @@ class AppState extends ChangeNotifier {
     prefs = await SharedPreferences.getInstance();
     token = await _secure.read(key: 'token');
     lang = prefs.getString('lang') ?? '';
+    onboarded = isOnboarded(prefs, token);
+    bgSetupSeen = prefs.getBool('bgSetupSeen') ?? false;
     final s = prefs.getString('settings');
     if (s != null) cfg = Settings.fromJson(jsonDecode(s));
     for (final t in jsonDecode(prefs.getString('trades') ?? '[]') as List) {
@@ -78,9 +105,19 @@ class AppState extends ChangeNotifier {
     }
     _initService();
     var ticks = 0;
+    var last = DateTime.now();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final now = DateTime.now(), gap = now.difference(last).inSeconds;
+      last = now;
+      // A 1 s timer that fires much later means the phone slept (Doze stops the CPU when the wakelock is
+      // not honoured). End the missed signals at once and get the connection back.
+      if (gap >= 5 && running) {
+        log(EngineEvent('wokeUp', {'seconds': gap}));
+        engine?.resync();
+        if (!connected && status != Conn.connecting) connect();
+      }
       // keep the session up between signals too (the engine also reconnects before each signal)
-      if (++ticks % 30 == 0 && token != null && status != Conn.connecting && !connected) connect();
+      if (++ticks % (running ? 5 : 30) == 0 && token != null && status != Conn.connecting && !connected) connect();
       if (running && (engine?.scheduled.isEmpty ?? true)) {
         log(const EngineEvent('allDone'));
         stop();
@@ -88,8 +125,56 @@ class AppState extends ChangeNotifier {
       notifyListeners();
     });
     if (token != null) connect();
+    checkBackground();
+    _life = AppLifecycleListener(onResume: onResume);
     notifyListeners();
   }
+
+  AppLifecycleListener? _life;
+
+  void finishOnboarding() {
+    onboarded = true;
+    prefs.setBool('onboarded', true);
+    notifyListeners();
+  }
+
+  void markBgSetupSeen() {
+    bgSetupSeen = true;
+    prefs.setBool('bgSetupSeen', true);
+  }
+
+  /// Back in the app: reconnect at once if the socket died meanwhile, and re-read the background state.
+  void onResume() {
+    if (token != null && status != Conn.connecting && !connected) connect();
+    checkBackground();
+  }
+
+  Future<void> checkBackground() async {
+    try {
+      final n = await FlutterForegroundTask.checkNotificationPermission() == NotificationPermission.granted;
+      bg = BgStatus(n, await FlutterForegroundTask.isIgnoringBatteryOptimizations);
+      brand = await _system.invokeMethod<String>('brand') ?? '';
+    } catch (_) {} // not Android (tests): nothing to check
+    notifyListeners();
+  }
+
+  Future<void> requestNotifications() async {
+    await _guard(() => FlutterForegroundTask.requestNotificationPermission());
+    await checkBackground();
+  }
+
+  /// System dialog "Let app always run in background?" (Doze exemption: network and wakelock keep working).
+  Future<void> requestBattery() async {
+    await _guard(() async {
+      if (!await FlutterForegroundTask.requestIgnoreBatteryOptimization()) {
+        await FlutterForegroundTask.openIgnoreBatteryOptimizationSettings();
+      }
+    });
+    await checkBackground();
+  }
+
+  /// Opens the first OEM screen ("package/class") that exists on this phone, else the app's info page.
+  Future<void> openSystemScreen(List<String> components) => _guard(() => _system.invokeMethod('open', components));
 
   void _initService() => FlutterForegroundTask.init(
         androidNotificationOptions: AndroidNotificationOptions(
@@ -97,7 +182,9 @@ class AppState extends ChangeNotifier {
             onlyAlertOnce: false),
         iosNotificationOptions: const IOSNotificationOptions(),
         foregroundTaskOptions: ForegroundTaskOptions(
-            eventAction: ForegroundTaskEventAction.nothing(), allowWakeLock: true, allowWifiLock: true),
+            // partial wakelock + wifi lock while trading; no auto-restart: a restarted service has no engine
+            eventAction: ForegroundTaskEventAction.nothing(), allowWakeLock: true, allowWifiLock: true,
+            allowAutoRestart: false),
       );
 
   void setLang(String code) {
@@ -149,9 +236,12 @@ class AppState extends ChangeNotifier {
       if (!reuse || engine == null) engine = Engine(c, cfg, trades, log, onTrade: (_) => saveTrades());
       if (!running) c.follow(_clockPair(c)); // price ticks teach the clock before the first signal
       status = Conn.connected;
+      connectError = null;
       log(EngineEvent('connected', {'demo': cfg.demo}));
+      if (running) engine?.resync(); // signals whose minute passed while offline are skipped, not entered late
     } catch (e) {
       status = Conn.failed;
+      connectError = '$e';
       log(EngineEvent('connectFailed', {'error': '$e'}));
     }
     notifyListeners();
@@ -164,7 +254,10 @@ class AppState extends ChangeNotifier {
 
   bool get connected => q?.alive ?? false;
 
-  void saveSettings() => prefs.setString('settings', jsonEncode(cfg.toJson()));
+  void saveSettings() {
+    prefs.setString('settings', jsonEncode(cfg.toJson()));
+    notifyListeners();
+  }
   void saveTrades() => prefs.setString('trades', jsonEncode([for (final t in trades) t.toJson()]));
 
   Future<void> switchAccount(bool demo) async {
@@ -186,15 +279,16 @@ class AppState extends ChangeNotifier {
     final kept = e.start(parse(text));
     running = kept.isNotEmpty;
     if (running) {
-      WakelockPlus.enable();
+      _guard(() => WakelockPlus.enable());
       final l = strings;
       _guard(() async {
         await FlutterForegroundTask.requestNotificationPermission();
-        await FlutterForegroundTask.requestIgnoreBatteryOptimization();
         _initService(); // channel name in the current language
-        await FlutterForegroundTask.startService(
+        final r = await FlutterForegroundTask.startService(
             serviceId: 7, notificationTitle: l.notifTrading, notificationText: l.scheduled(kept.length),
-            callback: startCallback);
+            // Android 14+: specialUse (no daily limit); older Android: the manifest types
+            serviceTypes: [ForegroundServiceTypes.specialUse], callback: startCallback);
+        if (r is ServiceRequestFailure) log(EngineEvent('serviceFailed', {'error': '${r.error}'}));
       });
       log(EngineEvent('started', {'count': kept.length}));
     }
@@ -211,6 +305,14 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The next signal still to be entered (by entry time), or null.
+  Signal? get nextSignal {
+    final e = engine;
+    if (e == null) return null;
+    final waiting = e.scheduled.where((s) => !e.entered.contains(s)).toList()..sort((a, b) => a.at.compareTo(b.at));
+    return waiting.firstOrNull;
+  }
+
   List<Trade> get mine => trades.where((t) => t.demo == cfg.demo).toList();
   List<Trade> get today {
     final n = DateTime.now();
@@ -220,6 +322,7 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _timer?.cancel();
+    _life?.dispose();
     super.dispose();
   }
 }

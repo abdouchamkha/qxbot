@@ -72,6 +72,8 @@ String formatEvent(L l, EngineEvent e) {
         resultLabel(l, a['result']), signedMoney(a['profit'] as double)),
     'error' => l.evError(pair, '${a['error']}'),
     'clockWarning' => l.evClockWarning(signedSeconds(a['offset'] as double)),
+    'wokeUp' => l.evWokeUp(ltr(a['seconds'])),
+    'serviceFailed' => l.evServiceFailed('${a['error']}'),
     _ => '$e',
   };
 }
@@ -88,6 +90,7 @@ String formatReason(L l, EngineEvent r) {
     'pairClosed' => l.rPairClosed,
     'payout' => l.rPayout(_num(a['payout']), _num(a['min'])),
     'stopped' => l.rStopped,
+    'late' => l.rLate(ltr(a['seconds'])),
     _ => '$r',
   };
 }
@@ -95,7 +98,24 @@ String formatReason(L l, EngineEvent r) {
 /// Log colour class: 1 good, -1 bad, 0 neutral, 2 warning.
 int eventTone(EngineEvent e) => switch (e.key) {
       'result' => e.args['result'] == 'win' ? 1 : e.args['result'] == 'loss' ? -1 : 0,
-      'orderRejected' || 'connectFailed' || 'reconnectFailed' || 'error' || 'resultNotReceived' => -1,
-      'clockWarning' || 'skipped' || 'pendingCancelled' || 'connectionLost' => 2,
+      'orderRejected' || 'connectFailed' || 'reconnectFailed' || 'error' || 'resultNotReceived' || 'serviceFailed' => -1,
+      'clockWarning' || 'skipped' || 'pendingCancelled' || 'connectionLost' || 'wokeUp' => 2,
       _ => 0,
     };
+
+/// A connection error in plain words (the raw text stays in the Details log).
+String humanError(L l, String? raw) {
+  final e = raw ?? '';
+  if (e.contains('authorization')) return l.loginExpired;
+  if (RegExp('SocketException|host lookup|unreachable|Connection (refused|reset|failed)', caseSensitive: false).hasMatch(e)) {
+    return l.noInternet;
+  }
+  return l.connectProblem;
+}
+
+/// "03:12" (or "1:03:12") until [d]; "00:00" when past. LTR-isolated.
+String countdown(Duration d) {
+  if (d.isNegative) d = Duration.zero;
+  final h = d.inHours, m = _two(d.inMinutes % 60), s = _two(d.inSeconds % 60);
+  return ltr(h > 0 ? '$h:$m:$s' : '$m:$s');
+}

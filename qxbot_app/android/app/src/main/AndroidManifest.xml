@@ -4,15 +4,23 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <application
         android:label="QXBot"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- Android 14+: started as specialUse (no daily limit; dataSync is cut after 6 h a day on
+             Android 15+). Older Android uses the manifest types. stopWithTask=false: swiping the app
+             away from Recents keeps trading (the Dart engine is kept alive by MainActivity). -->
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
-            android:foregroundServiceType="dataSync"
-            android:exported="false" />
+            android:foregroundServiceType="dataSync|specialUse"
+            android:stopWithTask="false"
+            android:exported="false">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps a live trading connection open and places user-scheduled trades at exact minutes while the screen is off"/>
+        </service>
         <activity
             android:name=".MainActivity"
             android:exported="true"

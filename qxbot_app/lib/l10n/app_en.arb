@@ -510,5 +510,198 @@
         "type": "String"
       }
     }
+  },
+  "tabResults": "Results",
+  "details": "Details",
+  "detailsTitle": "Details (technical log)",
+  "nextTrade": "Next trade",
+  "atTime": "at {time}",
+  "@atTime": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "inCountdown": "in {time}",
+  "@inCountdown": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "nowEntering": "entering now",
+  "noNextTrade": "No trade waiting",
+  "botStoppedHint": "Copy a signal list in Telegram, then tap the button below.",
+  "todayProfit": "Today's profit",
+  "winsLosses": "{wins} won · {losses} lost",
+  "@winsLosses": {
+    "placeholders": {
+      "wins": {
+        "type": "String"
+      },
+      "losses": {
+        "type": "String"
+      }
+    }
+  },
+  "pasteBig": "Paste list from clipboard",
+  "typeList": "Type or edit the list",
+  "clipboardEmpty": "The clipboard is empty. Copy the signal list in Telegram first.",
+  "noSignalsInText": "No signals found in the copied text. Copy the whole list (e.g. M1 EURUSD 14:30 CALL).",
+  "previewSummary": "{amount} per trade · {account} account",
+  "@previewSummary": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "account": {
+        "type": "String"
+      }
+    }
+  },
+  "martingaleOn": "Martingale ×{mult}, up to {levels} steps",
+  "@martingaleOn": {
+    "placeholders": {
+      "mult": {
+        "type": "String"
+      },
+      "levels": {
+        "type": "String"
+      }
+    }
+  },
+  "martingaleOffShort": "Martingale off",
+  "edit": "Edit",
+  "realStartTitle": "Trade with REAL money?",
+  "realStartBody": "{trades} trades of {amount} on your REAL account (more if martingale is used). Losses are real.",
+  "@realStartBody": {
+    "placeholders": {
+      "trades": {
+        "type": "String"
+      },
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "startReal": "Start with real money",
+  "stopTitle": "Stop the bot?",
+  "stopBody": "Waiting trades are cancelled. Trades already open on Quotex finish normally.",
+  "keepRunning": "Keep running",
+  "upcoming": "Upcoming",
+  "inTrade": "in trade",
+  "latestResults": "Latest results",
+  "seeAll": "See all",
+  "noResultsYet": "No results yet. They appear here after each trade.",
+  "firstEntry": "First entry",
+  "statistics": "Statistics",
+  "bgWarnTitle": "Background not set up",
+  "bgWarnBody": "Trading may stop when the screen is off.",
+  "fix": "Fix",
+  "loginExpired": "Your Quotex login has expired. Please log in again.",
+  "noInternet": "No internet connection. Check Wi-Fi or mobile data.",
+  "connectProblem": "Can't reach Quotex right now. Trying again...",
+  "logInAgain": "Log in again",
+  "retry": "Retry",
+  "account": "Account",
+  "logoutTitle": "Log out of Quotex?",
+  "essentials": "Essentials",
+  "martingale": "Martingale",
+  "martingaleSub": "After a loss, trade the next candle with a bigger amount",
+  "levels": "Steps",
+  "tzHint": "The time zone the channel writes its times in (look for \"UTC-3\" at the top of the list). If the list says it, the list wins.",
+  "dailyLimits": "Daily limits",
+  "advanced": "Advanced",
+  "advancedSub": "Pending orders, entry timing, overlap, payout",
+  "backgroundSetup": "Background setup",
+  "backgroundSetupSub": "Keep trading with the screen off",
+  "other": "Other",
+  "bgTitle": "Keep QXBot running",
+  "bgIntro": "Android stops apps in the background to save battery. Do these steps once so QXBot keeps trading with the screen off.",
+  "bgNotif": "Notifications",
+  "bgNotifSub": "Shows that the bot is running, and each result",
+  "bgBattery": "Battery: no restrictions",
+  "bgBatterySub": "Tap Allow, then choose \"Allow\" / \"Don't optimize\" / \"Unrestricted\"",
+  "bgBrand": "Phone settings ({brand})",
+  "@bgBrand": {
+    "placeholders": {
+      "brand": {
+        "type": "String"
+      }
+    }
+  },
+  "bgBrandGeneric": "Phone settings",
+  "allow": "Allow",
+  "allowed": "Allowed",
+  "openSettings": "Open",
+  "bgXiaomi": "Autostart: turn QXBot ON. Then App info > Battery saver: \"No restrictions\". In recent apps, pull QXBot down to lock it.",
+  "bgHuawei": "App launch: turn off \"Manage automatically\" for QXBot, then allow Auto-launch, Secondary launch and Run in background.",
+  "bgOppo": "Auto launch: turn QXBot ON. Battery > App battery management > QXBot: allow background activity.",
+  "bgVivo": "Background startup and \"High background power consumption\": allow QXBot.",
+  "bgSamsung": "Battery > Background usage limits > Never sleeping apps: add QXBot (and remove it from Sleeping apps).",
+  "bgOther": "App info > Battery: \"Unrestricted\". If your phone has an \"Autostart\" or \"Background activity\" setting, allow QXBot.",
+  "bgTips": "Tips: keep the phone charging during long lists, and don't close QXBot from recent apps.",
+  "bgPending": "Good to know: pending orders (OTC pairs, placed 1 minute ahead) are already on Quotex and open even if the phone sleeps. Martingale and direct trades need the app awake.",
+  "continueBtn": "Continue",
+  "later": "Later",
+  "done": "Done",
+  "welcome": "Welcome to QXBot",
+  "obStep": "Step {step} of {total}",
+  "@obStep": {
+    "placeholders": {
+      "step": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "obAccountTitle": "Which account?",
+  "obAccountBody": "Start with demo to try the bot with practice money. You can switch any time in Settings.",
+  "demoCardTitle": "Demo (practice money)",
+  "demoCardSub": "Recommended to start. No risk.",
+  "realCardTitle": "Real money",
+  "realCardSub": "Trades use your real balance.",
+  "obAmountTitle": "Amount per trade",
+  "obAmountBody": "How much each trade uses. With martingale on, a lost trade is followed by one of {amount}.",
+  "@obAmountBody": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "obDoneTitle": "All set!",
+  "obDoneBody": "Copy a signal list in Telegram, open QXBot and tap \"Paste list from clipboard\".",
+  "goHome": "Start using QXBot",
+  "next": "Next",
+  "back": "Back",
+  "invalidAmount": "Enter an amount of at least 1",
+  "evWokeUp": "The phone was asleep for {seconds} s: checking the connection and the list",
+  "@evWokeUp": {
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "evServiceFailed": "Background mode could not start ({error}). Keep the app open.",
+  "@evServiceFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "rLate": "its minute started {seconds} s ago (phone was asleep); a late entry is worse than none",
+  "@rLate": {
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
   }
 }

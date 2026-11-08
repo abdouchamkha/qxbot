@@ -519,4 +519,331 @@ class LEn extends L {
   String evClockWarning(String offset) {
     return 'Phone clock is $offset s off Quotex: timing is corrected automatically';
   }
+
+  @override
+  String get tabResults => 'Results';
+
+  @override
+  String get details => 'Details';
+
+  @override
+  String get detailsTitle => 'Details (technical log)';
+
+  @override
+  String get nextTrade => 'Next trade';
+
+  @override
+  String atTime(String time) {
+    return 'at $time';
+  }
+
+  @override
+  String inCountdown(String time) {
+    return 'in $time';
+  }
+
+  @override
+  String get nowEntering => 'entering now';
+
+  @override
+  String get noNextTrade => 'No trade waiting';
+
+  @override
+  String get botStoppedHint =>
+      'Copy a signal list in Telegram, then tap the button below.';
+
+  @override
+  String get todayProfit => 'Today\'s profit';
+
+  @override
+  String winsLosses(String wins, String losses) {
+    return '$wins won · $losses lost';
+  }
+
+  @override
+  String get pasteBig => 'Paste list from clipboard';
+
+  @override
+  String get typeList => 'Type or edit the list';
+
+  @override
+  String get clipboardEmpty =>
+      'The clipboard is empty. Copy the signal list in Telegram first.';
+
+  @override
+  String get noSignalsInText =>
+      'No signals found in the copied text. Copy the whole list (e.g. M1 EURUSD 14:30 CALL).';
+
+  @override
+  String previewSummary(String amount, String account) {
+    return '$amount per trade · $account account';
+  }
+
+  @override
+  String martingaleOn(String mult, String levels) {
+    return 'Martingale ×$mult, up to $levels steps';
+  }
+
+  @override
+  String get martingaleOffShort => 'Martingale off';
+
+  @override
+  String get edit => 'Edit';
+
+  @override
+  String get realStartTitle => 'Trade with REAL money?';
+
+  @override
+  String realStartBody(String trades, String amount) {
+    return '$trades trades of $amount on your REAL account (more if martingale is used). Losses are real.';
+  }
+
+  @override
+  String get startReal => 'Start with real money';
+
+  @override
+  String get stopTitle => 'Stop the bot?';
+
+  @override
+  String get stopBody =>
+      'Waiting trades are cancelled. Trades already open on Quotex finish normally.';
+
+  @override
+  String get keepRunning => 'Keep running';
+
+  @override
+  String get upcoming => 'Upcoming';
+
+  @override
+  String get inTrade => 'in trade';
+
+  @override
+  String get latestResults => 'Latest results';
+
+  @override
+  String get seeAll => 'See all';
+
+  @override
+  String get noResultsYet =>
+      'No results yet. They appear here after each trade.';
+
+  @override
+  String get firstEntry => 'First entry';
+
+  @override
+  String get statistics => 'Statistics';
+
+  @override
+  String get bgWarnTitle => 'Background not set up';
+
+  @override
+  String get bgWarnBody => 'Trading may stop when the screen is off.';
+
+  @override
+  String get fix => 'Fix';
+
+  @override
+  String get loginExpired =>
+      'Your Quotex login has expired. Please log in again.';
+
+  @override
+  String get noInternet =>
+      'No internet connection. Check Wi-Fi or mobile data.';
+
+  @override
+  String get connectProblem => 'Can\'t reach Quotex right now. Trying again...';
+
+  @override
+  String get logInAgain => 'Log in again';
+
+  @override
+  String get retry => 'Retry';
+
+  @override
+  String get account => 'Account';
+
+  @override
+  String get logoutTitle => 'Log out of Quotex?';
+
+  @override
+  String get essentials => 'Essentials';
+
+  @override
+  String get martingale => 'Martingale';
+
+  @override
+  String get martingaleSub =>
+      'After a loss, trade the next candle with a bigger amount';
+
+  @override
+  String get levels => 'Steps';
+
+  @override
+  String get tzHint =>
+      'The time zone the channel writes its times in (look for \"UTC-3\" at the top of the list). If the list says it, the list wins.';
+
+  @override
+  String get dailyLimits => 'Daily limits';
+
+  @override
+  String get advanced => 'Advanced';
+
+  @override
+  String get advancedSub => 'Pending orders, entry timing, overlap, payout';
+
+  @override
+  String get backgroundSetup => 'Background setup';
+
+  @override
+  String get backgroundSetupSub => 'Keep trading with the screen off';
+
+  @override
+  String get other => 'Other';
+
+  @override
+  String get bgTitle => 'Keep QXBot running';
+
+  @override
+  String get bgIntro =>
+      'Android stops apps in the background to save battery. Do these steps once so QXBot keeps trading with the screen off.';
+
+  @override
+  String get bgNotif => 'Notifications';
+
+  @override
+  String get bgNotifSub => 'Shows that the bot is running, and each result';
+
+  @override
+  String get bgBattery => 'Battery: no restrictions';
+
+  @override
+  String get bgBatterySub =>
+      'Tap Allow, then choose \"Allow\" / \"Don\'t optimize\" / \"Unrestricted\"';
+
+  @override
+  String bgBrand(String brand) {
+    return 'Phone settings ($brand)';
+  }
+
+  @override
+  String get bgBrandGeneric => 'Phone settings';
+
+  @override
+  String get allow => 'Allow';
+
+  @override
+  String get allowed => 'Allowed';
+
+  @override
+  String get openSettings => 'Open';
+
+  @override
+  String get bgXiaomi =>
+      'Autostart: turn QXBot ON. Then App info > Battery saver: \"No restrictions\". In recent apps, pull QXBot down to lock it.';
+
+  @override
+  String get bgHuawei =>
+      'App launch: turn off \"Manage automatically\" for QXBot, then allow Auto-launch, Secondary launch and Run in background.';
+
+  @override
+  String get bgOppo =>
+      'Auto launch: turn QXBot ON. Battery > App battery management > QXBot: allow background activity.';
+
+  @override
+  String get bgVivo =>
+      'Background startup and \"High background power consumption\": allow QXBot.';
+
+  @override
+  String get bgSamsung =>
+      'Battery > Background usage limits > Never sleeping apps: add QXBot (and remove it from Sleeping apps).';
+
+  @override
+  String get bgOther =>
+      'App info > Battery: \"Unrestricted\". If your phone has an \"Autostart\" or \"Background activity\" setting, allow QXBot.';
+
+  @override
+  String get bgTips =>
+      'Tips: keep the phone charging during long lists, and don\'t close QXBot from recent apps.';
+
+  @override
+  String get bgPending =>
+      'Good to know: pending orders (OTC pairs, placed 1 minute ahead) are already on Quotex and open even if the phone sleeps. Martingale and direct trades need the app awake.';
+
+  @override
+  String get continueBtn => 'Continue';
+
+  @override
+  String get later => 'Later';
+
+  @override
+  String get done => 'Done';
+
+  @override
+  String get welcome => 'Welcome to QXBot';
+
+  @override
+  String obStep(String step, String total) {
+    return 'Step $step of $total';
+  }
+
+  @override
+  String get obAccountTitle => 'Which account?';
+
+  @override
+  String get obAccountBody =>
+      'Start with demo to try the bot with practice money. You can switch any time in Settings.';
+
+  @override
+  String get demoCardTitle => 'Demo (practice money)';
+
+  @override
+  String get demoCardSub => 'Recommended to start. No risk.';
+
+  @override
+  String get realCardTitle => 'Real money';
+
+  @override
+  String get realCardSub => 'Trades use your real balance.';
+
+  @override
+  String get obAmountTitle => 'Amount per trade';
+
+  @override
+  String obAmountBody(String amount) {
+    return 'How much each trade uses. With martingale on, a lost trade is followed by one of $amount.';
+  }
+
+  @override
+  String get obDoneTitle => 'All set!';
+
+  @override
+  String get obDoneBody =>
+      'Copy a signal list in Telegram, open QXBot and tap \"Paste list from clipboard\".';
+
+  @override
+  String get goHome => 'Start using QXBot';
+
+  @override
+  String get next => 'Next';
+
+  @override
+  String get back => 'Back';
+
+  @override
+  String get invalidAmount => 'Enter an amount of at least 1';
+
+  @override
+  String evWokeUp(String seconds) {
+    return 'The phone was asleep for $seconds s: checking the connection and the list';
+  }
+
+  @override
+  String evServiceFailed(String error) {
+    return 'Background mode could not start ($error). Keep the app open.';
+  }
+
+  @override
+  String rLate(String seconds) {
+    return 'its minute started $seconds s ago (phone was asleep); a late entry is worse than none';
+  }
 }

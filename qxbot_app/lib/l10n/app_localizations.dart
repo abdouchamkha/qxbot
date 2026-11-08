@@ -885,6 +885,570 @@ abstract class L {
   /// In en, this message translates to:
   /// **'Phone clock is {offset} s off Quotex: timing is corrected automatically'**
   String evClockWarning(String offset);
+
+  /// No description provided for @tabResults.
+  ///
+  /// In en, this message translates to:
+  /// **'Results'**
+  String get tabResults;
+
+  /// No description provided for @details.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get details;
+
+  /// No description provided for @detailsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Details (technical log)'**
+  String get detailsTitle;
+
+  /// No description provided for @nextTrade.
+  ///
+  /// In en, this message translates to:
+  /// **'Next trade'**
+  String get nextTrade;
+
+  /// No description provided for @atTime.
+  ///
+  /// In en, this message translates to:
+  /// **'at {time}'**
+  String atTime(String time);
+
+  /// No description provided for @inCountdown.
+  ///
+  /// In en, this message translates to:
+  /// **'in {time}'**
+  String inCountdown(String time);
+
+  /// No description provided for @nowEntering.
+  ///
+  /// In en, this message translates to:
+  /// **'entering now'**
+  String get nowEntering;
+
+  /// No description provided for @noNextTrade.
+  ///
+  /// In en, this message translates to:
+  /// **'No trade waiting'**
+  String get noNextTrade;
+
+  /// No description provided for @botStoppedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy a signal list in Telegram, then tap the button below.'**
+  String get botStoppedHint;
+
+  /// No description provided for @todayProfit.
+  ///
+  /// In en, this message translates to:
+  /// **'Today\'s profit'**
+  String get todayProfit;
+
+  /// No description provided for @winsLosses.
+  ///
+  /// In en, this message translates to:
+  /// **'{wins} won · {losses} lost'**
+  String winsLosses(String wins, String losses);
+
+  /// No description provided for @pasteBig.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste list from clipboard'**
+  String get pasteBig;
+
+  /// No description provided for @typeList.
+  ///
+  /// In en, this message translates to:
+  /// **'Type or edit the list'**
+  String get typeList;
+
+  /// No description provided for @clipboardEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'The clipboard is empty. Copy the signal list in Telegram first.'**
+  String get clipboardEmpty;
+
+  /// No description provided for @noSignalsInText.
+  ///
+  /// In en, this message translates to:
+  /// **'No signals found in the copied text. Copy the whole list (e.g. M1 EURUSD 14:30 CALL).'**
+  String get noSignalsInText;
+
+  /// No description provided for @previewSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} per trade · {account} account'**
+  String previewSummary(String amount, String account);
+
+  /// No description provided for @martingaleOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Martingale ×{mult}, up to {levels} steps'**
+  String martingaleOn(String mult, String levels);
+
+  /// No description provided for @martingaleOffShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Martingale off'**
+  String get martingaleOffShort;
+
+  /// No description provided for @edit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get edit;
+
+  /// No description provided for @realStartTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Trade with REAL money?'**
+  String get realStartTitle;
+
+  /// No description provided for @realStartBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{trades} trades of {amount} on your REAL account (more if martingale is used). Losses are real.'**
+  String realStartBody(String trades, String amount);
+
+  /// No description provided for @startReal.
+  ///
+  /// In en, this message translates to:
+  /// **'Start with real money'**
+  String get startReal;
+
+  /// No description provided for @stopTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop the bot?'**
+  String get stopTitle;
+
+  /// No description provided for @stopBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting trades are cancelled. Trades already open on Quotex finish normally.'**
+  String get stopBody;
+
+  /// No description provided for @keepRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep running'**
+  String get keepRunning;
+
+  /// No description provided for @upcoming.
+  ///
+  /// In en, this message translates to:
+  /// **'Upcoming'**
+  String get upcoming;
+
+  /// No description provided for @inTrade.
+  ///
+  /// In en, this message translates to:
+  /// **'in trade'**
+  String get inTrade;
+
+  /// No description provided for @latestResults.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest results'**
+  String get latestResults;
+
+  /// No description provided for @seeAll.
+  ///
+  /// In en, this message translates to:
+  /// **'See all'**
+  String get seeAll;
+
+  /// No description provided for @noResultsYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No results yet. They appear here after each trade.'**
+  String get noResultsYet;
+
+  /// No description provided for @firstEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'First entry'**
+  String get firstEntry;
+
+  /// No description provided for @statistics.
+  ///
+  /// In en, this message translates to:
+  /// **'Statistics'**
+  String get statistics;
+
+  /// No description provided for @bgWarnTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Background not set up'**
+  String get bgWarnTitle;
+
+  /// No description provided for @bgWarnBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Trading may stop when the screen is off.'**
+  String get bgWarnBody;
+
+  /// No description provided for @fix.
+  ///
+  /// In en, this message translates to:
+  /// **'Fix'**
+  String get fix;
+
+  /// No description provided for @loginExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Quotex login has expired. Please log in again.'**
+  String get loginExpired;
+
+  /// No description provided for @noInternet.
+  ///
+  /// In en, this message translates to:
+  /// **'No internet connection. Check Wi-Fi or mobile data.'**
+  String get noInternet;
+
+  /// No description provided for @connectProblem.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t reach Quotex right now. Trying again...'**
+  String get connectProblem;
+
+  /// No description provided for @logInAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Log in again'**
+  String get logInAgain;
+
+  /// No description provided for @retry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get retry;
+
+  /// No description provided for @account.
+  ///
+  /// In en, this message translates to:
+  /// **'Account'**
+  String get account;
+
+  /// No description provided for @logoutTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Log out of Quotex?'**
+  String get logoutTitle;
+
+  /// No description provided for @essentials.
+  ///
+  /// In en, this message translates to:
+  /// **'Essentials'**
+  String get essentials;
+
+  /// No description provided for @martingale.
+  ///
+  /// In en, this message translates to:
+  /// **'Martingale'**
+  String get martingale;
+
+  /// No description provided for @martingaleSub.
+  ///
+  /// In en, this message translates to:
+  /// **'After a loss, trade the next candle with a bigger amount'**
+  String get martingaleSub;
+
+  /// No description provided for @levels.
+  ///
+  /// In en, this message translates to:
+  /// **'Steps'**
+  String get levels;
+
+  /// No description provided for @tzHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The time zone the channel writes its times in (look for \"UTC-3\" at the top of the list). If the list says it, the list wins.'**
+  String get tzHint;
+
+  /// No description provided for @dailyLimits.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily limits'**
+  String get dailyLimits;
+
+  /// No description provided for @advanced.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced'**
+  String get advanced;
+
+  /// No description provided for @advancedSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending orders, entry timing, overlap, payout'**
+  String get advancedSub;
+
+  /// No description provided for @backgroundSetup.
+  ///
+  /// In en, this message translates to:
+  /// **'Background setup'**
+  String get backgroundSetup;
+
+  /// No description provided for @backgroundSetupSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep trading with the screen off'**
+  String get backgroundSetupSub;
+
+  /// No description provided for @other.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get other;
+
+  /// No description provided for @bgTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep QXBot running'**
+  String get bgTitle;
+
+  /// No description provided for @bgIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Android stops apps in the background to save battery. Do these steps once so QXBot keeps trading with the screen off.'**
+  String get bgIntro;
+
+  /// No description provided for @bgNotif.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications'**
+  String get bgNotif;
+
+  /// No description provided for @bgNotifSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Shows that the bot is running, and each result'**
+  String get bgNotifSub;
+
+  /// No description provided for @bgBattery.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery: no restrictions'**
+  String get bgBattery;
+
+  /// No description provided for @bgBatterySub.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap Allow, then choose \"Allow\" / \"Don\'t optimize\" / \"Unrestricted\"'**
+  String get bgBatterySub;
+
+  /// No description provided for @bgBrand.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone settings ({brand})'**
+  String bgBrand(String brand);
+
+  /// No description provided for @bgBrandGeneric.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone settings'**
+  String get bgBrandGeneric;
+
+  /// No description provided for @allow.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow'**
+  String get allow;
+
+  /// No description provided for @allowed.
+  ///
+  /// In en, this message translates to:
+  /// **'Allowed'**
+  String get allowed;
+
+  /// No description provided for @openSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get openSettings;
+
+  /// No description provided for @bgXiaomi.
+  ///
+  /// In en, this message translates to:
+  /// **'Autostart: turn QXBot ON. Then App info > Battery saver: \"No restrictions\". In recent apps, pull QXBot down to lock it.'**
+  String get bgXiaomi;
+
+  /// No description provided for @bgHuawei.
+  ///
+  /// In en, this message translates to:
+  /// **'App launch: turn off \"Manage automatically\" for QXBot, then allow Auto-launch, Secondary launch and Run in background.'**
+  String get bgHuawei;
+
+  /// No description provided for @bgOppo.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto launch: turn QXBot ON. Battery > App battery management > QXBot: allow background activity.'**
+  String get bgOppo;
+
+  /// No description provided for @bgVivo.
+  ///
+  /// In en, this message translates to:
+  /// **'Background startup and \"High background power consumption\": allow QXBot.'**
+  String get bgVivo;
+
+  /// No description provided for @bgSamsung.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery > Background usage limits > Never sleeping apps: add QXBot (and remove it from Sleeping apps).'**
+  String get bgSamsung;
+
+  /// No description provided for @bgOther.
+  ///
+  /// In en, this message translates to:
+  /// **'App info > Battery: \"Unrestricted\". If your phone has an \"Autostart\" or \"Background activity\" setting, allow QXBot.'**
+  String get bgOther;
+
+  /// No description provided for @bgTips.
+  ///
+  /// In en, this message translates to:
+  /// **'Tips: keep the phone charging during long lists, and don\'t close QXBot from recent apps.'**
+  String get bgTips;
+
+  /// No description provided for @bgPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Good to know: pending orders (OTC pairs, placed 1 minute ahead) are already on Quotex and open even if the phone sleeps. Martingale and direct trades need the app awake.'**
+  String get bgPending;
+
+  /// No description provided for @continueBtn.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get continueBtn;
+
+  /// No description provided for @later.
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get later;
+
+  /// No description provided for @done.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get done;
+
+  /// No description provided for @welcome.
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome to QXBot'**
+  String get welcome;
+
+  /// No description provided for @obStep.
+  ///
+  /// In en, this message translates to:
+  /// **'Step {step} of {total}'**
+  String obStep(String step, String total);
+
+  /// No description provided for @obAccountTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Which account?'**
+  String get obAccountTitle;
+
+  /// No description provided for @obAccountBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Start with demo to try the bot with practice money. You can switch any time in Settings.'**
+  String get obAccountBody;
+
+  /// No description provided for @demoCardTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Demo (practice money)'**
+  String get demoCardTitle;
+
+  /// No description provided for @demoCardSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended to start. No risk.'**
+  String get demoCardSub;
+
+  /// No description provided for @realCardTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Real money'**
+  String get realCardTitle;
+
+  /// No description provided for @realCardSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Trades use your real balance.'**
+  String get realCardSub;
+
+  /// No description provided for @obAmountTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount per trade'**
+  String get obAmountTitle;
+
+  /// No description provided for @obAmountBody.
+  ///
+  /// In en, this message translates to:
+  /// **'How much each trade uses. With martingale on, a lost trade is followed by one of {amount}.'**
+  String obAmountBody(String amount);
+
+  /// No description provided for @obDoneTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'All set!'**
+  String get obDoneTitle;
+
+  /// No description provided for @obDoneBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy a signal list in Telegram, open QXBot and tap \"Paste list from clipboard\".'**
+  String get obDoneBody;
+
+  /// No description provided for @goHome.
+  ///
+  /// In en, this message translates to:
+  /// **'Start using QXBot'**
+  String get goHome;
+
+  /// No description provided for @next.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get next;
+
+  /// No description provided for @back.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get back;
+
+  /// No description provided for @invalidAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an amount of at least 1'**
+  String get invalidAmount;
+
+  /// No description provided for @evWokeUp.
+  ///
+  /// In en, this message translates to:
+  /// **'The phone was asleep for {seconds} s: checking the connection and the list'**
+  String evWokeUp(String seconds);
+
+  /// No description provided for @evServiceFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Background mode could not start ({error}). Keep the app open.'**
+  String evServiceFailed(String error);
+
+  /// No description provided for @rLate.
+  ///
+  /// In en, this message translates to:
+  /// **'its minute started {seconds} s ago (phone was asleep); a late entry is worse than none'**
+  String rLate(String seconds);
 }
 
 class _LDelegate extends LocalizationsDelegate<L> {

@@ -151,6 +151,11 @@ class Engine {
   Completer<Map>? _pendingReply;
   String? _pendingAsset;
   final scheduled = <Signal>[]; // signals still running; Stop clears it, so old runs end even after a restart
+  final entered = <Signal>{}; // signals with an order on Quotex (their gales/results may still be running)
+
+  /// A trade sent later than this after its candle opened is skipped: a late entry is worse than none.
+  /// (A slow pair's entry waits up to 1.5 s for its first tick, see [_waitEntry].)
+  static const maxLate = 2.0;
   final started = DateTime.now();
   bool _clockWarned = false;
 
@@ -282,14 +287,40 @@ class Engine {
     for (final s in kept) {
       runSignal(s)
           .catchError((e) => _say('error', {'pair': s.asset, 'error': '$e'}))
-          .whenComplete(() => scheduled.remove(s));
+          .whenComplete(() {
+            scheduled.remove(s);
+            entered.remove(s);
+          });
     }
     return kept;
   }
 
   void stop() {
     scheduled.clear();
+    entered.clear();
     taken.clear();
+  }
+
+  /// True (and logs the skip) when the candle at [at] opened more than [maxLate] s ago, e.g. after the phone
+  /// slept through it (Doze freezes timers; they fire late on wake-up).
+  bool _tooLate(Signal s, int at) {
+    final late = now() - at;
+    if (late <= maxLate) return false;
+    _skip(s, 'late', {'seconds': late.round()});
+    return true;
+  }
+
+  /// After a reconnect or a wake-up: end the signals whose entry time passed with no order sent
+  /// (each one logged as skipped). Returns how many are still scheduled.
+  int resync() {
+    for (final s in [...scheduled]) {
+      if (!entered.contains(s) && now() - s.at.millisecondsSinceEpoch / 1000 > maxLate) {
+        scheduled.remove(s);
+        _skip(s, 'late', {'seconds': (now() - s.at.millisecondsSinceEpoch / 1000).round()});
+      }
+    }
+    q.chart = null; // a new socket has no chart: show the pair again before the next order
+    return scheduled.length;
   }
 
   Future<bool> ensureConnected() => reconnecting.run(() async {
@@ -331,12 +362,16 @@ class Engine {
     if (!scheduled.contains(s)) return null;
     final c = Completer<Map>();
     late double sent;
+    var late = false;
     await chart.run(() async {
       await _waitEntry(s, at);
+      late = !scheduled.contains(s) || _tooLate(s, at);
+      if (late) return;
       _orders[requestId] = _orders[s.asset] = c;
       q.emit('orders/open', payload);
       sent = now();
     });
+    if (late) return null;
     Map data;
     try {
       data = await c.future.timeout(const Duration(seconds: 10));
@@ -405,6 +440,7 @@ class Engine {
     }
     final ticket = '$t';
     final c = _pendingOpened[ticket] = Completer();
+    entered.add(s); // on Quotex now: it opens even if this phone sleeps
     _say('pendingSet', {..._sig(s), 'amount': amount, 'at': at});
     await sleepUntil(at - 3.0);
     final reason = scheduled.contains(s) ? limitReason() : const EngineEvent('stopped');
@@ -433,16 +469,18 @@ class Engine {
     var at = s.at.millisecondsSinceEpoch ~/ 1000;
     var amount = cfg.amount;
     final signal = '${s.at.toIso8601String()} ${s.asset} ${s.direction}';
-    final usePending = cfg.pending && s.asset.endsWith('_otc') && at - now() > 70;
+    var usePending = cfg.pending && s.asset.endsWith('_otc') && at - now() > 70;
     await sleepUntil(at - (usePending ? 70.0 : 15.0));
-    if (!scheduled.contains(s)) return;
+    if (!scheduled.contains(s) || _tooLate(s, at)) return;
     if (!await ensureConnected()) return _skip(s, 'notConnected');
+    if (usePending && at - now() < 62) usePending = false; // woke up late: Quotex needs >= 60 s for a pending order
     final info = await instrument(s.asset);
     if (info == null) return _skip(s, 'pairNotFound');
     if (info[14] != true) return _skip(s, 'pairClosed');
     final payout = info[s.duration < 300 ? 18 : 19];
     if (payout is num && payout < cfg.minPayout) return _skip(s, 'payout', {'payout': payout, 'min': cfg.minPayout});
     if (!canTrade(s, amount)) return;
+    if (_tooLate(s, at)) return;
     Map? data;
     var kind = 'pending';
     if (usePending) {
@@ -461,6 +499,7 @@ class Engine {
         kind = 'direct';
       }
       if (data == null) return;
+      entered.add(s);
       _report(s, data, level, amount, signal, kind);
       if (level == cfg.gales) return;
       final end = at + s.duration;
