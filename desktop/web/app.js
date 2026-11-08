@@ -221,7 +221,7 @@ async function renderLogin() {
       <div id="login-err" class="alert alert-err hidden"></div>
       <label class="field" id="profile-field"><span>${t("profile")}</span><select class="input" id="l-profile"></select></label>
       <label class="field hidden" id="newname-field"><span>${t("profile_name")}</span><input class="input" id="l-newname" maxlength="40"></label>
-      <label class="field"><span>${t("email")}</span><input class="input ltr" id="l-email" type="email" autocomplete="username" required></label>
+      <label class="field"><span>${t("email")}</span><input class="input ltr" id="l-email" type="text" inputmode="email" autocapitalize="off" spellcheck="false" autocomplete="username" required></label>
       <label class="field"><span>${t("password")}</span><input class="input ltr" id="l-pass" type="password" autocomplete="current-password"></label>
       <div class="seg" role="group" aria-label="Account">
         <button type="button" data-v="PRACTICE">${t("demo")}</button><button type="button" data-v="REAL">${t("real")}</button></div>
@@ -260,7 +260,7 @@ async function loadLoginProfile(name) {
 function doConnect() {
   const sel = $("#l-profile").value;
   const name = sel === "__new" ? $("#l-newname").value.trim() || "default" : sel;
-  act($("#l-go"), () => api("connect", { name, email: $("#l-email").value.trim(), password: $("#l-pass").value,
+  act($("#l-go"), () => api("connect", { name, email: $("#l-email").value.replace(/[\s\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, ""), password: $("#l-pass").value,
     account: loginAccount, remember: $("#l-remember").checked }));
 }
 function updateLogin() {
