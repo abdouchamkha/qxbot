@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from bot import is_losing, parse_signals  # parse_signals re-exported from signals.py
+from bot import is_losing, parse_signals, past_signals  # parse_signals re-exported from signals.py
 
 TZ = timezone(timedelta(hours=-3))
 LIST = """M1 NZDJPY-OTC 00:00 PUT  ✅
@@ -108,3 +108,34 @@ def test_daily_limits_and_balance(monkeypatch):
     assert b.pre_ms() == 250  # auto, no ping measured yet
     b.pings.extend([0.4, 0.5, 0.6])
     assert b.pre_ms() == 250 and Bot({"pre_entry_ms": 120}).pre_ms() == 120
+
+
+def test_backtest_result_with_gale():
+    from bot import backtest_result
+    s = parse_signals("M1 EURUSD 10:00 CALL", TZ, datetime(2026, 11, 5, 9, 0, tzinfo=TZ))[0]
+    t = int(s.at.timestamp())
+    c = lambda o, cl: {"open": o, "close": cl}
+    assert backtest_result(s, {t: c(1, 2)}, 1) == "WIN"
+    assert backtest_result(s, {t: c(2, 1), t + 60: c(1, 2)}, 1) == "WIN G1"
+    assert backtest_result(s, {t: c(2, 1), t + 60: c(2, 1)}, 1) == "LOSS"
+    assert backtest_result(s, {t: c(2, 1)}, 0) == "LOSS"
+    assert backtest_result(s, {t: c(1, 1)}, 1) == "DRAW"
+    assert backtest_result(s, {}, 1) == "no data"
+
+
+def test_parse_collects_passed_signals():
+    passed = []
+    s = parse_signals(LIST, TZ, datetime(2026, 11, 5, 0, 10, tzinfo=TZ), passed=passed)
+    assert [x.at.minute for x in s] == [23, 45]
+    assert [(x.at.minute, x.direction) for x in passed] == [(0, "put"), (3, "put")]
+
+
+def test_past_signals_puts_every_time_in_last_24h_and_can_override_list_tz():
+    now = datetime(2026, 11, 8, 18, 0, tzinfo=timezone.utc)
+    text = "TIMEZONE: UTC +06:00\nM1 USDBRL 00:04 PUT\nM1 USDBRL 23:50 CALL"
+    s = past_signals(text, TZ, now)  # list tz +6: 00:04 = Nov 7 18:04 UTC, 23:50 = Nov 8 17:50 UTC
+    assert [x.at.astimezone(timezone.utc) for x in s] == [datetime(2026, 11, 7, 18, 4, tzinfo=timezone.utc),
+                                                          datetime(2026, 11, 8, 17, 50, tzinfo=timezone.utc)]
+    s = past_signals(text, timezone(timedelta(hours=-3)), now, force_tz=True)  # 23:50-3 = 02:50 UTC, 00:04-3 = 03:04 UTC
+    assert [x.at.astimezone(timezone.utc).hour for x in s] == [2, 3]
+    assert all(now - timedelta(days=1) < x.at <= now for x in s)

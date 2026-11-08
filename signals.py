@@ -113,10 +113,11 @@ def list_timezone(text: str) -> timezone | None:
 
 
 def parse_signals(text: str, tz: timezone, now: datetime, names: list[tuple[str, str]] | None = None,
-                  default_duration: int = 60, unknown: list[str] | None = None) -> list[Signal]:
+                  default_duration: int = 60, unknown: list[str] | None = None,
+                  passed: list[Signal] | None = None) -> list[Signal]:
     """Signals in time order. A timezone written in the list (UTC-3, GMT+1) overrides `tz`.
-    Past times within 12h are dropped (already happened today); older ones roll to tomorrow.
-    Lines with a time and a direction but no pair Quotex knows are added to `unknown`."""
+    Past times within 12h are left out (already happened today) and added to `passed` (for a backtest);
+    older ones roll to tomorrow. Lines with a time and a direction but no pair Quotex knows are added to `unknown`."""
     tz = list_timezone(text) or tz
     index = symbol_index(names) if names else None
     out: list[Signal] = []
@@ -126,16 +127,20 @@ def parse_signals(text: str, tz: timezone, now: datetime, names: list[tuple[str,
     def emit(f: dict) -> None:
         hh, mm = f["time"]
         at = now.astimezone(tz).replace(hour=hh, minute=mm, second=0, microsecond=0)
-        if at <= now:
-            if now - at < timedelta(hours=12):
-                return
-            at += timedelta(days=1)
         otc = f.get("otc", False) or header["otc"]
         asset = f["pair"] + ("_otc" if otc else "")
         if index is not None:
             variants = index[f["pair"]]
             asset = variants.get(otc) or variants.get(not otc)  # e.g. a pair Quotex only has as OTC
-        out.append(Signal(f.get("duration", header["duration"]), asset, at, f["direction"]))
+        target = out
+        if at <= now:
+            if now - at < timedelta(hours=12):
+                if passed is None:
+                    return
+                target = passed
+            else:
+                at += timedelta(days=1)
+        target.append(Signal(f.get("duration", header["duration"]), asset, at, f["direction"]))
 
     def complete(f: dict) -> bool:
         return {"pair", "time", "direction"} <= f.keys()
@@ -166,4 +171,6 @@ def parse_signals(text: str, tz: timezone, now: datetime, names: list[tuple[str,
             if keys & block.keys() & {"pair", "time", "direction"}:  # a field repeats: next signal
                 flush()
             block.update(f)
+    if passed is not None:
+        passed.sort(key=lambda s: s.at)
     return sorted(out, key=lambda s: s.at)

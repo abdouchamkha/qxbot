@@ -23,6 +23,8 @@ On start it asks for the settings below and saves them as named profiles in `con
 | safe_pips | 0 | optional: wait up to half the candle for the price to move this far against the signal (backtest: worse, keep 0) |
 | stop_loss / take_profit | 0 / 0 | daily limits in $ (0 = off): no new trades or gales today once reached |
 
+Type `backtest` (or `backtest -3 +6 5.5` to try timezones), then paste a list: every signal is scored at its last occurrence in the past 24h. Signals in a pasted list whose time already passed (within 12h) are also backtested on Quotex's 1-minute candles (open vs close, with the gale) and printed as WIN / WIN G1 / LOSS / DRAW.
+
 Commands at the paste prompt: `stats` (session/today/all-time analytics from `trades.csv`), `history` (today's results from Quotex's own records, includes manual trades).
 
 ## Signal formats

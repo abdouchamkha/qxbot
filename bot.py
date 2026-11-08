@@ -19,7 +19,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
-from signals import Signal, list_timezone, parse_signals
+from dataclasses import replace
+
+from signals import TZ_RE, Signal, list_timezone, parse_signals
 
 HERE = Path(__file__).parent
 CONFIG_FILE = HERE / "config.json"
@@ -31,6 +33,33 @@ TRADE_FIELDS = ["time", "profile", "account", "signal", "asset", "direction", "l
 def is_losing(direction: str, open_price: float, price: float) -> bool:
     """Equal price is a refund (draw) on Quotex, so not a loss."""
     return price < open_price if direction == "call" else price > open_price
+
+
+def backtest_result(s: Signal, candles: dict[int, dict], gales: int) -> str:
+    """Result of a past signal from 1-minute candles keyed by open time: WIN, WIN G1, LOSS, DRAW, or no data.
+    A level loses on the candle(s) of its expiry; a loss goes to the next gale, like live trading."""
+    t = int(s.at.timestamp())
+    for level in range(gales + 1):
+        first, last = candles.get(t), candles.get(t + s.duration - 60)
+        if not first or not last:
+            return "no data"
+        if last["close"] == first["open"]:
+            return "DRAW" + (f" G{level}" if level else "")
+        if not is_losing(s.direction, first["open"], last["close"]):
+            return "WIN" + (f" G{level}" if level else "")
+        t += s.duration
+    return "LOSS"
+
+
+def past_signals(text: str, tz: timezone, now: datetime, names: list[tuple[str, str]] | None = None,
+                 force_tz: bool = False) -> list[Signal]:
+    """Every signal of a list at its latest time before `now` (within 24h), for a backtest.
+    force_tz: use `tz` even if the list names its own timezone (to try other timezones)."""
+    if force_tz:
+        text = TZ_RE.sub(" ", text.upper())
+    passed: list[Signal] = []
+    future = parse_signals(text, tz, now, names, passed=passed)
+    return sorted(passed + [replace(s, at=s.at - timedelta(days=1)) for s in future], key=lambda s: s.at)
 
 
 def median_gap(ticks: list[dict]) -> float:
@@ -415,7 +444,9 @@ class Bot:
                 try:
                     data = json.loads(text)
                     fut = self.pending_opened.pop(str(data.get("ticket")), None)
-                    if fut and not fut.done():
+                    # Quotex sometimes sends this without an error code and opens the order anyway:
+                    # only a real error code is a failure, else entering directly would double the trade.
+                    if fut and not fut.done() and data.get("error"):
                         fut.set_result({"error": f"pending failed (code {data.get('error')})"})
                 except ValueError:
                     pass
@@ -663,6 +694,28 @@ class Bot:
         })
         print("  " + stats_line("Session", [r for r in self.my_trades() if r["time"] >= self.started]))
 
+    async def backtest(self, signals: list[Signal]) -> None:
+        """Score signals whose time already passed against Quotex's 1-minute candle history."""
+        # shortcut: candle open/close, not the exact tick a live order would get; fine for a past-list check
+        print(f"Backtest of {len(signals)} past signals (Quotex candles, gales={self.cfg['gales']}):")
+        results = []
+        for asset in dict.fromkeys(s.asset for s in signals):
+            first = min(s.at.timestamp() for s in signals if s.asset == asset)
+            async with self.chart:  # loading history switches the chart stream
+                rows = await self.broker.get_historical_candles(
+                    asset, int(time.time() - first) + 600, 60, max_workers=1)
+            candles = {int(c["time"]): c for c in rows or []}
+            for s in signals:
+                if s.asset == asset:
+                    results.append((s, backtest_result(s, candles, self.cfg["gales"])))
+        for s, r in sorted(results, key=lambda x: x[0].at):
+            print(f"  {s.at:%H:%M} {s.asset:12} {s.direction.upper():4} {r}")
+        rs = [r for _, r in results]
+        wins = sum(r.startswith("WIN") for r in rs)
+        losses, draws = rs.count("LOSS"), sum(r.startswith("DRAW") for r in rs)
+        print(f"  Backtest: {wins}W {losses}L {draws}D" + (f", {rs.count('no data')} no data" if "no data" in rs else "")
+              + (f" ({wins * 100 // (wins + losses)}% won)" if wins + losses else ""))
+
     async def quotex_history(self, day: str) -> list[dict]:
         """Quotex's own trade history for one day (YYYY-MM-DD, UTC), as trades.csv-style rows."""
         from curl_cffi.requests import AsyncSession
@@ -749,7 +802,7 @@ async def read_line(prompt: str) -> str:
 async def read_list() -> str:
     """A paste ends when no new line arrives for 0.6s after an empty line, so blank lines
     inside a list (between signal blocks, after a header) don't cut it."""
-    print("\nPaste the signal list, then an empty line (or type: stats / history):")
+    print("\nPaste the signal list, then an empty line (or type: stats / history / backtest [-3 +6 ...]):")
     lines: list[str] = []
     while True:
         wait = 0.6 if lines and not lines[-1].strip() else None
@@ -759,7 +812,7 @@ async def read_list() -> str:
             return "\n".join(lines)
         if line is None:
             raise SystemExit("Input closed.")
-        if not lines and line.strip().lower() in ("stats", "history"):
+        if not lines and (line.strip().lower() in ("stats", "history") or line.strip().lower().startswith("backtest")):
             return line.strip().lower()
         if lines or line.strip():
             lines.append(line)
@@ -785,13 +838,38 @@ async def main() -> None:
             except Exception as e:
                 print(f"Could not load Quotex history: {e!r}")
             continue
+        if text.startswith("backtest"):  # backtest [UTC offsets]: score any list on the last 24h of candles
+            try:
+                offsets = [float(o.replace("−", "-")) for o in text.split()[1:]]
+            except ValueError:
+                print("Usage: backtest   or   backtest -3 +6 5.5   (UTC offsets to try)")
+                continue
+            print("Backtest: paste the list (times count as their last occurrence in the past 24h).")
+            text = await read_list()
+            names = [(i[1], i[2]) for i in bot.broker.api.instruments]
+            for off in offsets or [None]:
+                btz = timezone(timedelta(hours=off)) if off is not None else (list_timezone(text) or tz)
+                print(f"\n== Times read as {btz} ==")
+                try:
+                    await bot.backtest(past_signals(text, btz, datetime.now(timezone.utc), names or None,
+                                                    force_tz=off is not None))
+                except Exception as e:
+                    print(f"  Backtest failed: {e!r}")
+            continue
         if list_tz := list_timezone(text):
             print(f"  (times read as {list_tz}, written in the list)")
         names = [(i[1], i[2]) for i in bot.broker.api.instruments]
         unknown: list[str] = []
-        signals = bot.schedule(parse_signals(text, tz, datetime.now(timezone.utc), names or None, unknown=unknown))
+        passed: list[Signal] = []
+        signals = bot.schedule(parse_signals(text, tz, datetime.now(timezone.utc), names or None,
+                                             unknown=unknown, passed=passed))
         for line in unknown:
             print(f"  not understood (pair not on Quotex?): {line}")
+        if passed:
+            try:
+                await bot.backtest(passed)
+            except Exception as e:
+                print(f"  Backtest failed: {e!r}")
         if not signals:
             print("No upcoming signals found.")
             continue
