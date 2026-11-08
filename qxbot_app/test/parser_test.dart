@@ -112,4 +112,31 @@ void main() {
     expect(listTimezone('(UTC +6:00)'), const Duration(hours: 6));
     expect(listTimezone('GMT−3'), const Duration(hours: -3));
   });
+
+  // Arabic lists
+  test('arabic header with timezone, arabic block labels', () {
+    const text = 'إشارات اليوم 🔥 التوقيت UTC+1\n'
+        'مدة الصفقة: 5 دقائق\n\n'
+        '📊 الزوج: EUR/USD OTC\n⏰ الوقت: 14:30\n🟢 الاتجاه: شراء\n\n'
+        '📊 الزوج: GBP/JPY\n⏰ الوقت: 14:40\n🔴 الاتجاه: بيع';
+    final s = parseSignals(text, tz, now, names: names);
+    expect(s.map((x) => (x.asset, x.hhmm, x.duration, x.direction)),
+        [('EURUSD_otc', '14:30', 300, 'call'), ('GBPJPY', '14:40', 300, 'put')]);
+    expect(s[0].offset, const Duration(hours: 1));
+  });
+
+  test('arabic one-line signals with arabic-indic digits', () {
+    expect(parsed('EURUSD-OTC ١٤:٣٠ صعود ١ دقيقة\nGBPJPY ۱۴:۳۵ هبوط', names),
+        [('EURUSD_otc', '14:30', 60, 'call'), ('GBPJPY', '14:35', 60, 'put')]);
+  });
+
+  test('arabic GMT header and unknown pair report', () {
+    final unknown = <String>[];
+    final s = parseSignals('توقيت (GMT -3:00)\nAUD/CAD OTC 11:05 أعلى\nXYZ/ABC 11:10 أدنى', const Duration(hours: 5), now,
+        names: names, unknown: unknown);
+    expect(s.single.asset, 'AUDCAD_otc');
+    expect(s.single.offset, const Duration(hours: -3));
+    expect(s.single.direction, 'call');
+    expect(unknown, ['XYZ/ABC 11:10 أدنى']);
+  });
 }

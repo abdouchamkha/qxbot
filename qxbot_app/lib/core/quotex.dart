@@ -5,13 +5,17 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'clock.dart';
+
 typedef EventHandler = void Function(String name, dynamic data);
 
 class QuotexClient {
   final String token;
   final bool demo;
   final String host;
-  QuotexClient(this.token, {required this.demo, this.host = 'ws2.quotex.com'});
+  final ServerClock clock; // Quotex time, learnt from tick timestamps
+  QuotexClient(this.token, {required this.demo, this.host = 'ws2.quotex.com', ServerClock? clock})
+      : clock = clock ?? ServerClock();
 
   WebSocket? _ws;
   Timer? _ping, _tick;
@@ -38,9 +42,10 @@ class QuotexClient {
         headers: {'User-Agent': 'Quotex/1.0', 'Origin': 'https://quotex.com'}).timeout(const Duration(seconds: 15));
     ws.listen((f) => identical(ws, _ws) ? _onFrame(f) : null, // ignore a replaced socket's last frames
         onDone: () => auth.isCompleted ? null : auth.completeError('socket closed'), onError: (_) {}, cancelOnError: false);
-    _ping = Timer.periodic(const Duration(seconds: 25), (_) => _send('2'));
+    _ping = Timer.periodic(const Duration(seconds: 25), (_) => _sendPing());
     _tick = Timer.periodic(const Duration(seconds: 5), (_) => emit('tick'));
     await auth.future.timeout(const Duration(seconds: 15));
+    _sendPing(); // measure the network round trip at once (the clock needs it)
     emit('instruments/get');
     emit('balance/list');
     chart = null;
@@ -51,6 +56,14 @@ class QuotexClient {
     _tick?.cancel();
     await _ws?.close();
     _ws = null;
+  }
+
+  Stopwatch? _pingSent; // monotonic: a phone clock step must not distort the round trip
+
+  /// Engine.IO ping; the server's pong times the pure network round trip for the clock.
+  void _sendPing() {
+    _pingSent = Stopwatch()..start();
+    _send('2');
   }
 
   void _send(String s) {
@@ -66,6 +79,9 @@ class QuotexClient {
     if (frame is String) {
       if (frame == '40') {
         emit('authorization', {'session': token, 'isDemo': demo ? 1 : 0, 'tournamentId': 0});
+      } else if (frame == '3') {
+        if (_pingSent != null) clock.networkRoundTrip(_pingSent!.elapsedMicroseconds / 1e6);
+        _pingSent = null;
       } else if (frame == '2') {
         _send('3');
       } else if (frame.startsWith('451-')) {
@@ -110,6 +126,7 @@ class QuotexClient {
         if (row is List && row.length >= 3 && row[0] is String && row[1] is num && row[2] is num) {
           final list = ticks.putIfAbsent(row[0] as String, () => []);
           list.add(((row[1] as num).toDouble(), (row[2] as num).toDouble()));
+          clock.sample((row[1] as num).toDouble());
           if (list.length > 50) list.removeAt(0);
         }
       }
@@ -126,6 +143,12 @@ class QuotexClient {
 
   double? price(String asset) => ticks[asset]?.lastOrNull?.$2;
   double tickTime(String asset) => ticks[asset]?.lastOrNull?.$1 ?? 0;
+
+  /// Stream [asset]'s price ticks without changing the order settings (keeps the server clock learning).
+  void follow(String asset) {
+    emit('instruments/update', {'asset': asset, 'period': 60});
+    emit('depth/follow', asset);
+  }
 
   /// Put the account's chart on [asset] (Quotex ignores direct orders for another pair).
   void show(String asset, int duration, int endTime) {

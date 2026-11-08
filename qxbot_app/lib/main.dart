@@ -1,19 +1,20 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:intl/intl.dart' show Bidi;
 import 'package:webview_flutter/webview_flutter.dart';
 
+import 'app_state.dart';
 import 'core/engine.dart';
 import 'core/parser.dart';
-import 'core/quotex.dart';
+import 'format.dart';
+import 'l10n/app_localizations.dart';
 
 const green = Color(0xFF16C784), red = Color(0xFFEA3943), bg = Color(0xFF0B0E14), card = Color(0xFF151A23);
+const amber = Color(0xFFF0B90B);
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,178 +22,36 @@ void main() {
   runApp(const QxApp());
 }
 
-/// The foreground service only keeps the app process alive (and shows results);
-/// the engine itself runs in the main isolate.
-@pragma('vm:entry-point')
-void startCallback() => FlutterForegroundTask.setTaskHandler(_KeepAlive());
-
-class _KeepAlive extends TaskHandler {
-  @override
-  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {}
-  @override
-  void onRepeatEvent(DateTime timestamp) {}
-  @override
-  Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {}
-}
-
-Future<void> _guard(Future<void> Function() f) async {
-  try {
-    await f();
-  } catch (_) {} // the service is a nice-to-have: trading must not depend on it
-}
-
-/// App state: token, settings, trade history, connection and engine.
-class AppState extends ChangeNotifier {
-  static const _secure = FlutterSecureStorage();
-  late SharedPreferences prefs;
-  String? token;
-  Settings cfg = Settings();
-  final trades = <Trade>[];
-  final logs = <String>[];
-  QuotexClient? q;
-  Engine? engine;
-  String status = 'Disconnected';
-  bool running = false;
-  Timer? _timer;
-
-  Future<void> load() async {
-    prefs = await SharedPreferences.getInstance();
-    token = await _secure.read(key: 'token');
-    final s = prefs.getString('settings');
-    if (s != null) cfg = Settings.fromJson(jsonDecode(s));
-    for (final t in jsonDecode(prefs.getString('trades') ?? '[]') as List) {
-      trades.add(Trade.fromJson(t));
-    }
-    FlutterForegroundTask.init(
-      androidNotificationOptions: AndroidNotificationOptions(
-          channelId: 'qxbot', channelName: 'QXBot trading', channelDescription: 'Bot running and trade results',
-          onlyAlertOnce: false),
-      iosNotificationOptions: const IOSNotificationOptions(),
-      foregroundTaskOptions: ForegroundTaskOptions(
-          eventAction: ForegroundTaskEventAction.nothing(), allowWakeLock: true, allowWifiLock: true),
+ThemeData qxTheme({required bool arabic}) => ThemeData(
+      colorScheme: ColorScheme.fromSeed(seedColor: green, brightness: Brightness.dark, surface: bg),
+      scaffoldBackgroundColor: bg,
+      fontFamily: arabic ? 'Cairo' : null, // bundled: renders Arabic and Latin well
+      cardTheme: CardThemeData(color: card, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+      inputDecorationTheme: InputDecorationTheme(
+          filled: true, fillColor: card, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
     );
-    var ticks = 0;
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      // keep the session up between signals too (the engine also reconnects before each signal)
-      if (++ticks % 30 == 0 && token != null && status != 'Connecting...' && !connected) connect();
-      if (running && (engine?.scheduled.isEmpty ?? true)) {
-        log('All signals done');
-        stop();
-      }
-      notifyListeners();
-    });
-    if (token != null) connect();
-    notifyListeners();
-  }
 
-  void log(String m) {
-    final n = DateTime.now();
-    logs.add('${_two(n.hour)}:${_two(n.minute)}:${_two(n.second)}  $m');
-    if (logs.length > 500) logs.removeAt(0);
-    if (running && (m.contains(': WIN') || m.contains(': LOSS') || m.contains(': DRAW'))) {
-      final today = summarize(this.today);
-      _guard(() => FlutterForegroundTask.updateService(
-          notificationTitle: 'QXBot · today ${money(today.net)} (${today.wins}W ${today.losses}L)', notificationText: m));
-    }
-    notifyListeners();
-  }
-
-  Future<void> setToken(String? t) async {
-    token = t;
-    t == null ? await _secure.delete(key: 'token') : await _secure.write(key: 'token', value: t);
-    if (t == null) {
-      stop();
-      await q?.close();
-      q = null;
-      status = 'Disconnected';
-    } else {
-      await connect();
-    }
-    notifyListeners();
-  }
-
-  Future<void> connect() async {
-    if (token == null) return;
-    status = 'Connecting...';
-    notifyListeners();
-    final reuse = q != null && q!.demo == cfg.demo && q!.token == token; // keep the running engine's client
-    if (!reuse) {
-      if (running) stop();
-      await q?.close();
-    }
-    final c = q = reuse ? q! : QuotexClient(token!, demo: cfg.demo);
-    try {
-      await c.connect();
-      await c.next((n, d) => n == 'instruments/list', const Duration(seconds: 10));
-      if (!reuse || engine == null) engine = Engine(c, cfg, trades, log, onTrade: (_) => saveTrades());
-      status = 'Connected';
-      log('Connected to Quotex (${cfg.demo ? 'DEMO' : 'REAL'} account)');
-    } catch (e) {
-      status = 'Login expired or no connection';
-      log('Connect failed: $e');
-    }
-    notifyListeners();
-  }
-
-  bool get connected => q?.alive ?? false;
-
-  void saveSettings() => prefs.setString('settings', jsonEncode(cfg.toJson()));
-  void saveTrades() => prefs.setString('trades', jsonEncode([for (final t in trades) t.toJson()]));
-
-  Future<void> switchAccount(bool demo) async {
-    cfg.demo = demo;
-    saveSettings();
-    await connect();
-  }
-
-  List<Signal> parse(String text, {List<String>? unknown}) => parseSignals(
-      text, Duration(minutes: cfg.utcOffsetMin), DateTime.now(),
-      names: q?.names, unknown: unknown);
-
-  int start(String text) {
-    final e = engine;
-    if (e == null) return 0;
-    final kept = e.start(parse(text));
-    running = kept.isNotEmpty;
-    if (running) {
-      WakelockPlus.enable();
-      _guard(() async {
-        await FlutterForegroundTask.requestNotificationPermission();
-        await FlutterForegroundTask.requestIgnoreBatteryOptimization();
-        await FlutterForegroundTask.startService(
-            serviceId: 7, notificationTitle: 'QXBot is trading', notificationText: '${kept.length} signals scheduled',
-            callback: startCallback);
-      });
-      log('Started: ${kept.length} signals scheduled');
-    }
-    notifyListeners();
-    return kept.length;
-  }
-
-  void stop() {
-    engine?.stop();
-    if (running) log('Stopped');
-    running = false;
-    WakelockPlus.disable();
-    _guard(() => FlutterForegroundTask.stopService());
-    notifyListeners();
-  }
-
-  List<Trade> get mine => trades.where((t) => t.demo == cfg.demo).toList();
-  List<Trade> get today {
-    final n = DateTime.now();
-    return mine.where((t) => t.time.year == n.year && t.time.month == n.month && t.time.day == n.day).toList();
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-}
-
-String _two(int v) => v.toString().padLeft(2, '0');
-String money(double v) => '${v >= 0 ? '+' : ''}${v.toStringAsFixed(2)}';
+/// The MaterialApp with localization, language choice and theme; [home] decides the page (tests pass their own).
+Widget qxMaterialApp(AppState app, Widget home) => ListenableBuilder(
+      listenable: app,
+      builder: (context, _) => MaterialApp(
+        onGenerateTitle: (c) => L.of(c).appTitle,
+        debugShowCheckedModeBanner: false,
+        locale: app.localeOverride, // null = the phone's language
+        supportedLocales: L.supportedLocales,
+        localizationsDelegates: const [
+          L.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        theme: qxTheme(arabic: false),
+        builder: (context, child) => Localizations.localeOf(context).languageCode == 'ar'
+            ? Theme(data: qxTheme(arabic: true), child: child!)
+            : child!,
+        home: home,
+      ),
+    );
 
 class QxApp extends StatefulWidget {
   const QxApp({super.key});
@@ -211,25 +70,10 @@ class _QxAppState extends State<QxApp> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = ColorScheme.fromSeed(seedColor: green, brightness: Brightness.dark, surface: bg);
-    return MaterialApp(
-      title: 'QXBot',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: scheme,
-        scaffoldBackgroundColor: bg,
-        cardTheme: CardThemeData(color: card, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-        inputDecorationTheme: InputDecorationTheme(filled: true, fillColor: card, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-      ),
-      home: !loaded
-          ? const Scaffold(body: Center(child: CircularProgressIndicator()))
-          : ListenableBuilder(
-              listenable: app,
-              builder: (context, _) => app.token == null ? LoginPage(app) : Shell(app),
-            ),
-    );
-  }
+  Widget build(BuildContext context) => !loaded
+      ? const MaterialApp(home: Scaffold(backgroundColor: bg, body: Center(child: CircularProgressIndicator())))
+      : qxMaterialApp(app, ListenableBuilder(
+          listenable: app, builder: (context, _) => app.token == null ? LoginPage(app) : Shell(app)));
 }
 
 // ---------------------------------------------------------------- login
@@ -270,38 +114,41 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _pasteToken() async {
+    final l = L.of(context);
     final c = TextEditingController();
     final t = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Session token'),
-        content: TextField(controller: c, decoration: const InputDecoration(hintText: 'Paste token')),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx, c.text.trim()), child: const Text('Use'))],
+        title: Text(l.sessionToken),
+        content: TextField(
+            controller: c, textDirection: TextDirection.ltr, decoration: InputDecoration(hintText: l.pasteToken)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l.cancel)),
+          TextButton(onPressed: () => Navigator.pop(ctx, c.text.trim()), child: Text(l.use)),
+        ],
       ),
     );
     if (t != null && t.isNotEmpty) widget.app.setToken(t);
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: const Text('Log in to Quotex'),
-          actions: [
-            IconButton(tooltip: 'Reload', icon: const Icon(Icons.refresh), onPressed: () => web.reload()),
-            IconButton(tooltip: 'Paste token', icon: const Icon(Icons.key), onPressed: _pasteToken),
-          ],
-        ),
-        body: Column(children: [
-          Container(
-            width: double.infinity,
-            color: card,
-            padding: const EdgeInsets.all(12),
-            child: const Text('Log in with your Quotex email and password (and the email code if asked). '
-                'The app continues by itself once you are in.'),
-          ),
-          Expanded(child: WebViewWidget(controller: web)),
-        ]),
-      );
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l.loginTitle),
+        actions: [
+          IconButton(tooltip: l.reload, icon: const Icon(Icons.refresh), onPressed: () => web.reload()),
+          IconButton(tooltip: l.pasteToken, icon: const Icon(Icons.key), onPressed: _pasteToken),
+        ],
+      ),
+      body: Column(children: [
+        Container(width: double.infinity, color: card, padding: const EdgeInsets.all(12), child: Text(l.loginHelp)),
+        // the Quotex page itself stays left-to-right
+        Expanded(child: Directionality(textDirection: TextDirection.ltr, child: WebViewWidget(controller: web))),
+      ]),
+    );
+  }
 }
 
 // ---------------------------------------------------------------- shell
@@ -317,23 +164,28 @@ class _ShellState extends State<Shell> {
   int tab = 0;
   @override
   Widget build(BuildContext context) {
-    final app = widget.app;
-    final pages = [HomePage(app, () => setState(() => tab = 1)), SignalsPage(app, () => setState(() => tab = 2)),
-      LivePage(app), StatsPage(app), SettingsPage(app)];
+    final app = widget.app, l = L.of(context);
+    final pages = [
+      HomePage(app, () => setState(() => tab = 1)),
+      SignalsPage(app, () => setState(() => tab = 2)),
+      LivePage(app),
+      StatsPage(app),
+      SettingsPage(app),
+    ];
     return Scaffold(
-      appBar: AppBar(title: const Text('QXBot', style: TextStyle(fontWeight: FontWeight.w800)), actions: [
-        Padding(padding: const EdgeInsets.only(right: 16), child: _AccountChip(app)),
+      appBar: AppBar(title: Text(l.appTitle, style: const TextStyle(fontWeight: FontWeight.w800)), actions: [
+        Padding(padding: const EdgeInsetsDirectional.only(end: 16), child: _AccountChip(app)),
       ]),
       body: SafeArea(child: pages[tab]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: tab,
         onDestinationSelected: (i) => setState(() => tab = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.list_alt), label: 'Signals'),
-          NavigationDestination(icon: Icon(Icons.bolt), label: 'Live'),
-          NavigationDestination(icon: Icon(Icons.bar_chart), label: 'Stats'),
-          NavigationDestination(icon: Icon(Icons.tune), label: 'Settings'),
+        destinations: [
+          NavigationDestination(icon: const Icon(Icons.home_outlined), selectedIcon: const Icon(Icons.home), label: l.tabHome),
+          NavigationDestination(icon: const Icon(Icons.list_alt), label: l.tabSignals),
+          NavigationDestination(icon: const Icon(Icons.bolt), label: l.tabLive),
+          NavigationDestination(icon: const Icon(Icons.bar_chart), label: l.tabStats),
+          NavigationDestination(icon: const Icon(Icons.tune), label: l.tabSettings),
         ],
       ),
     );
@@ -345,14 +197,14 @@ class _AccountChip extends StatelessWidget {
   const _AccountChip(this.app);
   @override
   Widget build(BuildContext context) => Chip(
-        label: Text(app.cfg.demo ? 'DEMO' : 'REAL', style: const TextStyle(fontWeight: FontWeight.bold)),
+        label: Text(app.cfg.demo ? L.of(context).demo : L.of(context).real, style: const TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: app.cfg.demo ? Colors.blueGrey.shade800 : Colors.orange.shade900,
         side: BorderSide.none,
       );
 }
 
 Widget section(String title, List<Widget> children) => Card(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -363,6 +215,10 @@ Widget section(String title, List<Widget> children) => Card(
       ),
     );
 
+/// Numbers, prices, times and symbols on their own: always left-to-right.
+Widget ltrText(String s, {TextStyle? style}) =>
+    Directionality(textDirection: TextDirection.ltr, child: Text(s, style: style));
+
 // ---------------------------------------------------------------- home
 
 class HomePage extends StatelessWidget {
@@ -372,15 +228,18 @@ class HomePage extends StatelessWidget {
 
   Future<void> _toggleAccount(BuildContext context, bool demo) async {
     if (!demo) {
+      final l = L.of(context);
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Switch to REAL money?'),
-          content: const Text('Trades will use your real Quotex balance. Losses are real.'),
+          title: Text(l.realTitle),
+          content: Text(l.realBody),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(style: FilledButton.styleFrom(backgroundColor: red), onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Use real account')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.cancel)),
+            FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: red),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(l.useReal)),
           ],
         ),
       );
@@ -391,37 +250,56 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = L.of(context);
     final today = summarize(app.today);
     final on = app.connected;
+    final offset = app.q?.clock.offset;
+    final statusText = on
+        ? l.connected
+        : switch (app.status) {
+            Conn.connecting => l.connecting,
+            Conn.failed => l.connectFailedStatus,
+            _ => l.disconnected,
+          };
     return ListView(children: [
-      section('Connection', [
+      section(l.connection, [
         Row(children: [
           Icon(Icons.circle, size: 12, color: on ? green : red),
           const SizedBox(width: 8),
-          Expanded(child: Text(on ? 'Connected' : app.status, style: const TextStyle(fontSize: 16))),
-          TextButton.icon(onPressed: app.connect, icon: const Icon(Icons.refresh), label: const Text('Reconnect')),
+          Expanded(child: Text(statusText, style: const TextStyle(fontSize: 16))),
+          TextButton.icon(onPressed: app.connect, icon: const Icon(Icons.refresh), label: Text(l.reconnect)),
+        ]),
+        const SizedBox(height: 4),
+        Row(children: [
+          Icon(offset == null ? Icons.schedule : Icons.verified, size: 16,
+              color: offset == null ? Colors.white38 : offset.abs() > 1 ? amber : green),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(offset == null ? l.clockNotVerified : l.clockCorrected(signedSeconds(offset)),
+                style: const TextStyle(color: Colors.white70)),
+          ),
         ]),
       ]),
-      section('Balance', [
-        Text(app.q?.balance == null ? '--' : '\$${app.q!.balance!.toStringAsFixed(2)}',
+      section(l.balance, [
+        ltrText(app.q?.balance == null ? '--' : '\$${app.q!.balance!.toStringAsFixed(2)}',
             style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w800)),
         const SizedBox(height: 4),
-        Text('Today ${money(today.net)}  ·  ${today.wins}W ${today.losses}L ${today.draws}D',
+        Text(l.todaySummary(signedMoney(today.net), ltr(today.wins), ltr(today.losses), ltr(today.draws)),
             style: TextStyle(fontSize: 16, color: today.net >= 0 ? green : red)),
         const SizedBox(height: 8),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
-          title: const Text('Demo account (practice money)'),
+          title: Text(l.demoAccountSwitch),
           value: app.cfg.demo,
           onChanged: app.running ? null : (v) => _toggleAccount(context, v),
         ),
       ]),
-      section('Bot', [
+      section(l.bot, [
         Row(children: [
           Icon(app.running ? Icons.play_circle : Icons.pause_circle, color: app.running ? green : Colors.white38, size: 32),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(app.running ? 'Running · ${app.engine?.scheduled.length ?? 0} signals waiting' : 'Stopped',
+            child: Text(app.running ? l.runningWaiting(app.engine?.scheduled.length ?? 0) : l.stopped,
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
           ),
         ]),
@@ -429,13 +307,17 @@ class HomePage extends StatelessWidget {
         SizedBox(
           width: double.infinity,
           child: app.running
-              ? FilledButton.icon(style: FilledButton.styleFrom(backgroundColor: red), onPressed: app.stop,
-                  icon: const Icon(Icons.stop), label: const Text('Stop'))
-              : FilledButton.icon(onPressed: goSignals, icon: const Icon(Icons.paste), label: const Text('Paste signals')),
+              ? FilledButton.icon(
+                  style: FilledButton.styleFrom(backgroundColor: red),
+                  onPressed: app.stop,
+                  icon: const Icon(Icons.stop),
+                  label: Text(l.stop))
+              : FilledButton.icon(onPressed: goSignals, icon: const Icon(Icons.paste), label: Text(l.pasteSignals)),
         ),
       ]),
       Center(
-        child: TextButton(onPressed: () => app.setToken(null), child: const Text('Log out', style: TextStyle(color: Colors.white38))),
+        child: TextButton(
+            onPressed: () => app.setToken(null), child: Text(l.logout, style: const TextStyle(color: Colors.white38))),
       ),
     ]);
   }
@@ -443,14 +325,21 @@ class HomePage extends StatelessWidget {
 
 // ---------------------------------------------------------------- signals
 
-Widget dirChip(String dir) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: (dir == 'call' ? green : red).withValues(alpha: 0.18), borderRadius: BorderRadius.circular(8)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(dir == 'call' ? Icons.arrow_upward : Icons.arrow_downward, size: 16, color: dir == 'call' ? green : red),
-        Text(dir == 'call' ? ' CALL' : ' PUT', style: TextStyle(color: dir == 'call' ? green : red, fontWeight: FontWeight.bold)),
-      ]),
-    );
+Widget dirChip(BuildContext context, String dir) {
+  final l = L.of(context), c = dir == 'call' ? green : red;
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    decoration: BoxDecoration(color: c.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(8)),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      // up/down arrows mean price direction: the same in both writing directions
+      Icon(dir == 'call' ? Icons.arrow_upward : Icons.arrow_downward, size: 16, color: c),
+      const SizedBox(width: 4),
+      Text(dirLabel(l, dir), style: TextStyle(color: c, fontWeight: FontWeight.bold)),
+    ]),
+  );
+}
+
+String durationLabel(L l, int seconds) => seconds >= 60 ? l.minutes(seconds ~/ 60) : l.seconds(seconds);
 
 class SignalsPage extends StatefulWidget {
   final AppState app;
@@ -482,43 +371,52 @@ class _SignalsPageState extends State<SignalsPage> {
   }
 
   @override
+  void dispose() {
+    text.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final app = widget.app;
+    final app = widget.app, l = L.of(context);
     final h = app.cfg.utcOffsetMin / 60;
+    final tz = ltr('UTC${h >= 0 ? '+' : ''}${h.toString().replaceAll('.0', '')}');
     return ListView(padding: const EdgeInsets.all(16), children: [
       TextField(
         controller: text,
         minLines: 6,
         maxLines: 12,
+        // a list's direction follows its text (most lists are Latin even in an Arabic app)
+        textDirection: Bidi.detectRtlDirectionality(text.text) ? TextDirection.rtl : TextDirection.ltr,
         decoration: InputDecoration(
-          hintText: 'Paste the Telegram signal list here\ne.g. M1 EURUSD-OTC 14:30 CALL',
+          hintText: l.signalsHint,
           suffixIcon: IconButton(
+            tooltip: l.pasteFromClipboard,
             icon: const Icon(Icons.content_paste),
             onPressed: () async => text.text = (await Clipboard.getData('text/plain'))?.text ?? '',
           ),
         ),
       ),
       const SizedBox(height: 8),
-      Text('List timezone: UTC${h >= 0 ? '+' : ''}${h.toString().replaceAll('.0', '')} (Settings; a "UTC+6" in the list wins)'
-          '${app.q == null ? ' · not connected: pair names not checked' : ''}',
-          style: const TextStyle(color: Colors.white54)),
+      Text(l.listTimezone(tz), style: const TextStyle(color: Colors.white54)),
+      if (app.q == null) Text(l.notConnectedNames, style: const TextStyle(color: amber)),
       const SizedBox(height: 12),
-      Text('${preview.length} signals found', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+      Text(l.signalsFound(preview.length), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
       for (final s in preview)
         Card(
           margin: const EdgeInsets.symmetric(vertical: 4),
           child: ListTile(
-            leading: Text(s.hhmm, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-            title: Text(s.asset.replaceAll('_otc', ' (OTC)')),
-            subtitle: Text('${s.duration >= 60 ? '${s.duration ~/ 60} min' : '${s.duration}s'}'),
-            trailing: dirChip(s.direction),
+            leading: ltrText(s.hhmm, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+            title: Text(pairLabel(s.asset)),
+            subtitle: Text(durationLabel(l, s.duration)),
+            trailing: dirChip(context, s.direction),
           ),
         ),
       for (final u in unknown)
         Card(
           color: Colors.orange.withValues(alpha: 0.15),
-          child: ListTile(leading: const Icon(Icons.help_outline, color: Colors.orange), title: Text(u),
-              subtitle: const Text('Pair not found on Quotex: this line is skipped')),
+          child: ListTile(
+              leading: const Icon(Icons.help_outline, color: Colors.orange), title: Text(u), subtitle: Text(l.pairNotFound)),
         ),
       const SizedBox(height: 16),
       FilledButton.icon(
@@ -528,11 +426,11 @@ class _SignalsPageState extends State<SignalsPage> {
             : () {
                 app.prefs.setString('lastList', text.text);
                 final n = app.start(text.text);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$n signals scheduled')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.scheduled(n))));
                 widget.goLive();
               },
         icon: const Icon(Icons.play_arrow),
-        label: Text(app.engine == null ? 'Connect first' : 'Start trading ${preview.length} signals'),
+        label: Text(app.engine == null ? l.connectFirst : l.startTrading(preview.length)),
       ),
     ]);
   }
@@ -545,24 +443,34 @@ class LivePage extends StatelessWidget {
   const LivePage(this.app, {super.key});
   @override
   Widget build(BuildContext context) {
+    final l = L.of(context);
     final waiting = app.engine?.scheduled ?? [];
     return ListView(padding: const EdgeInsets.all(16), children: [
       if (app.running)
-        FilledButton.icon(style: FilledButton.styleFrom(backgroundColor: red), onPressed: app.stop,
-            icon: const Icon(Icons.stop), label: const Text('Stop bot')),
+        FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: red),
+            onPressed: app.stop,
+            icon: const Icon(Icons.stop),
+            label: Text(l.stopBot)),
       const SizedBox(height: 8),
-      Text('Waiting (${waiting.length})', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+      Text(l.waiting(waiting.length), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
       for (final s in waiting)
-        ListTile(dense: true, leading: Text(s.hhmm, style: const TextStyle(fontSize: 16)), title: Text(s.asset), trailing: dirChip(s.direction)),
+        ListTile(
+            dense: true,
+            leading: ltrText(s.hhmm, style: const TextStyle(fontSize: 16)),
+            title: Text(pairLabel(s.asset)),
+            trailing: dirChip(context, s.direction)),
       const Divider(),
-      const Text('Log', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-      for (final l in app.logs.reversed)
+      Text(l.log, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+      if (app.logs.isEmpty) Text(l.logEmpty, style: const TextStyle(color: Colors.white54)),
+      for (final e in app.logs.reversed)
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 3),
-          child: Text(l,
+          child: Text('${ltr(clock(e.time))}  ${formatEvent(l, e.event)}',
               style: TextStyle(
-                  fontFamily: 'monospace', fontSize: 13,
-                  color: l.contains('WIN') ? green : l.contains('LOSS') || l.contains('REJECTED') || l.contains('failed') ? red : Colors.white70)),
+                  fontSize: 13,
+                  height: 1.35,
+                  color: switch (eventTone(e.event)) { 1 => green, -1 => red, 2 => amber, _ => Colors.white70 })),
         ),
     ]);
   }
@@ -574,7 +482,7 @@ class StatsPage extends StatelessWidget {
   final AppState app;
   const StatsPage(this.app, {super.key});
 
-  Widget _block(String title, List<Trade> rows) {
+  Widget _block(L l, String title, List<Trade> rows) {
     final s = summarize(rows);
     Widget tile(String k, String v, [Color? c]) => SizedBox(
           width: 150,
@@ -588,36 +496,38 @@ class StatsPage extends StatelessWidget {
         );
     return section(title, [
       Wrap(children: [
-        tile('Net profit', money(s.net), s.net >= 0 ? green : red),
-        tile('Win rate', '${s.winRate.toStringAsFixed(0)}%'),
-        tile('Trades', '${s.trades}'),
-        tile('W / L / D', '${s.wins} / ${s.losses} / ${s.draws}'),
-        tile('Signals won', '${s.signalsWon}/${s.signalsWon + s.signalsLost}'),
-        tile('Won after gale', '${s.signalsWonGale}'),
-        tile('Max drawdown', s.maxDrawdown.toStringAsFixed(2), red),
-        tile('Worst streak', '${s.lossStreak} losses'),
+        tile(l.netProfit, signedMoney(s.net), s.net >= 0 ? green : red),
+        tile(l.winRate, ltr('${s.winRate.toStringAsFixed(0)}%')),
+        tile(l.trades, ltr(s.trades)),
+        tile(l.wld, ltr('${s.wins} / ${s.losses} / ${s.draws}')),
+        tile(l.signalsWon, ltr('${s.signalsWon}/${s.signalsWon + s.signalsLost}')),
+        tile(l.wonAfterGale, ltr(s.signalsWonGale)),
+        tile(l.maxDrawdown, ltr(s.maxDrawdown.toStringAsFixed(2)), red),
+        tile(l.worstStreak, l.lossesCount(s.lossStreak)),
       ]),
     ]);
   }
 
   @override
   Widget build(BuildContext context) {
+    final l = L.of(context);
     final mine = app.mine;
     final session = mine.where((t) => app.engine != null && t.time.isAfter(app.engine!.started)).toList();
     return ListView(children: [
-      _block('This session', session),
-      _block('Today', app.today),
-      _block('All time (${app.cfg.demo ? 'demo' : 'real'})', mine),
-      section('Recent trades', [
-        if (mine.isEmpty) const Text('No trades yet', style: TextStyle(color: Colors.white54)),
+      _block(l, l.thisSession, session),
+      _block(l, l.today, app.today),
+      _block(l, l.allTime(app.cfg.demo ? l.demo : l.real), mine),
+      section(l.recentTrades, [
+        if (mine.isEmpty) Text(l.noTrades, style: const TextStyle(color: Colors.white54)),
         for (final t in mine.reversed.take(50))
           ListTile(
             contentPadding: EdgeInsets.zero,
             dense: true,
-            leading: dirChip(t.direction),
-            title: Text('${t.asset}${t.level > 0 ? '  G${t.level}' : ''}'),
-            subtitle: Text('${t.time.toString().substring(5, 16)} · \$${t.amount} · ${t.entry} ${t.delayMs}ms'),
-            trailing: Text(money(t.profit),
+            leading: dirChip(context, t.direction),
+            title: Text('${pairLabel(t.asset)}${t.level > 0 ? '  ${l.galeTag(ltr(t.level))}' : ''}'),
+            subtitle: Text('${ltr(t.time.toString().substring(5, 16))} · ${dollars(t.amount)} · '
+                '${entryLabel(l, t.entry)} · ${ltr('${t.delayMs} ms')}'),
+            trailing: Text(signedMoney(t.profit),
                 style: TextStyle(fontWeight: FontWeight.bold, color: t.profit > 0 ? green : t.profit < 0 ? red : null)),
           ),
       ]),
@@ -626,6 +536,17 @@ class StatsPage extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------- settings
+
+/// Parses a typed number, also with Arabic-Indic digits and Arabic separators.
+double? parseNumber(String v) {
+  final ascii = v
+      .trim()
+      .replaceAllMapped(RegExp('[\u0660-\u0669\u06F0-\u06F9]'), (m) => '${m[0]!.codeUnitAt(0) & 0xF}')
+      .replaceAll(RegExp('[,\u066B]'), '.')
+      .replaceAll('\u2212', '-')
+      .replaceAll(RegExp('[\u200E\u200F]'), '');
+  return double.tryParse(ascii);
+}
 
 class SettingsPage extends StatefulWidget {
   final AppState app;
@@ -647,9 +568,10 @@ class _SettingsPageState extends State<SettingsPage> {
         child: TextFormField(
           initialValue: value is int || value == value.roundToDouble() ? '${value.toInt()}' : '$value',
           keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+          textDirection: TextDirection.ltr, // numbers read left-to-right; label and help follow the app
           decoration: InputDecoration(labelText: label, helperText: help),
           onChanged: (v) {
-            final d = double.tryParse(v.replaceAll(',', '.'));
+            final d = parseNumber(v);
             if (d != null) {
               set(d);
               _save();
@@ -660,40 +582,54 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final locked = widget.app.running;
-    return AbsorbPointer(
-      absorbing: locked,
-      child: ListView(padding: const EdgeInsets.all(16), children: [
-        if (locked) const Text('Stop the bot to change settings', style: TextStyle(color: Colors.orange)),
-        _num('Trade amount (\$)', 'Stake for each signal', c.amount, (v) => c.amount = v),
-        _num('Signal list timezone (UTC hours)', 'e.g. -3 for UTC-3, 5.5 for UTC+5:30', c.utcOffsetMin / 60,
-            (v) => c.utcOffsetMin = (v * 60).round()),
-        _num('Martingale levels', '0 = off', c.gales, (v) => c.gales = v.round().clamp(0, 5)),
-        _num('Martingale multiplier', 'Next stake = stake x this', c.galeMultiplier, (v) => c.galeMultiplier = v),
-        _num('Minimum payout (%)', 'Skip a signal when the payout is lower', c.minPayout, (v) => c.minPayout = v),
-        _num('Daily stop-loss (\$)', '0 = off', c.stopLoss, (v) => c.stopLoss = v),
-        _num('Daily take-profit (\$)', '0 = off', c.takeProfit, (v) => c.takeProfit = v),
-        SwitchListTile(
-          title: const Text('Pending orders for OTC'),
-          subtitle: const Text('Quotex opens the trade itself at the exact minute'),
-          value: c.pending,
-          onChanged: (v) => {c.pending = v, _save()},
-        ),
-        SwitchListTile(
-          title: const Text('Allow overlapping signals'),
-          subtitle: const Text('Off: one signal per minute, a signal beats a martingale'),
-          value: c.overlap,
-          onChanged: (v) => {c.overlap = v, _save()},
-        ),
-        SwitchListTile(
-          title: const Text('Automatic entry timing'),
-          subtitle: const Text('Send direct orders half a ping before the minute'),
-          value: c.preEntryMs == null,
-          onChanged: (v) => {c.preEntryMs = v ? null : 250, _save()},
-        ),
-        if (c.preEntryMs != null)
-          _num('Pre-entry (ms)', 'Send this many ms before the minute', c.preEntryMs!, (v) => c.preEntryMs = v.round()),
-      ]),
-    );
+    final l = L.of(context), app = widget.app;
+    final locked = app.running;
+    return ListView(padding: const EdgeInsets.all(16), children: [
+      Text(l.language, style: const TextStyle(fontSize: 12, color: Colors.white54)),
+      const SizedBox(height: 6),
+      SegmentedButton<String>(
+        segments: [
+          ButtonSegment(value: '', label: Text(l.languageSystem)),
+          const ButtonSegment(value: 'en', label: Text('English')),
+          const ButtonSegment(value: 'ar', label: Text('العربية')),
+        ],
+        selected: {app.lang},
+        onSelectionChanged: (s) => app.setLang(s.first),
+      ),
+      const SizedBox(height: 16),
+      if (locked) Text(l.stopToChange, style: const TextStyle(color: Colors.orange)),
+      AbsorbPointer(
+        absorbing: locked,
+        child: Column(children: [
+          _num(l.amountLabel, l.amountHelp, c.amount, (v) => c.amount = v),
+          _num(l.tzLabel, l.tzHelp, c.utcOffsetMin / 60, (v) => c.utcOffsetMin = (v * 60).round()),
+          _num(l.galesLabel, l.offHelp, c.gales, (v) => c.gales = v.round().clamp(0, 5)),
+          _num(l.multLabel, l.multHelp, c.galeMultiplier, (v) => c.galeMultiplier = v),
+          _num(l.minPayoutLabel, l.minPayoutHelp, c.minPayout, (v) => c.minPayout = v),
+          _num(l.stopLossLabel, l.offHelp, c.stopLoss, (v) => c.stopLoss = v),
+          _num(l.takeProfitLabel, l.offHelp, c.takeProfit, (v) => c.takeProfit = v),
+          SwitchListTile(
+            title: Text(l.pendingTitle),
+            subtitle: Text(l.pendingSub),
+            value: c.pending,
+            onChanged: (v) => {c.pending = v, _save()},
+          ),
+          SwitchListTile(
+            title: Text(l.overlapTitle),
+            subtitle: Text(l.overlapSub),
+            value: c.overlap,
+            onChanged: (v) => {c.overlap = v, _save()},
+          ),
+          SwitchListTile(
+            title: Text(l.autoTiming),
+            subtitle: Text(l.autoTimingSub),
+            value: c.preEntryMs == null,
+            onChanged: (v) => {c.preEntryMs = v ? null : 250, _save()},
+          ),
+          if (c.preEntryMs != null)
+            _num(l.preEntryLabel, l.preEntryHelp, c.preEntryMs!, (v) => c.preEntryMs = v.round()),
+        ]),
+      ),
+    ]);
   }
 }

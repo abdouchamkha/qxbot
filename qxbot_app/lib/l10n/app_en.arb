@@ -1,0 +1,514 @@
+{
+  "@@locale": "en",
+  "appTitle": "QXBot",
+  "tabHome": "Home",
+  "tabSignals": "Signals",
+  "tabLive": "Live",
+  "tabStats": "Stats",
+  "tabSettings": "Settings",
+  "demo": "DEMO",
+  "real": "REAL",
+  "call": "CALL",
+  "put": "PUT",
+  "win": "WIN",
+  "loss": "LOSS",
+  "draw": "DRAW",
+  "cancel": "Cancel",
+  "loginTitle": "Log in to Quotex",
+  "loginHelp": "Log in with your Quotex email and password (and the email code if asked). The app continues by itself once you are in.",
+  "reload": "Reload",
+  "pasteToken": "Paste token",
+  "sessionToken": "Session token",
+  "use": "Use",
+  "connection": "Connection",
+  "connected": "Connected",
+  "connecting": "Connecting...",
+  "disconnected": "Disconnected",
+  "connectFailedStatus": "Login expired or no connection",
+  "reconnect": "Reconnect",
+  "clockCorrected": "Clock vs Quotex: {offset} s (corrected)",
+  "@clockCorrected": {
+    "placeholders": {
+      "offset": {
+        "type": "String"
+      }
+    }
+  },
+  "clockNotVerified": "Clock vs Quotex: not verified (phone clock in use)",
+  "balance": "Balance",
+  "todaySummary": "Today {net} · {wins}W {losses}L {draws}D",
+  "@todaySummary": {
+    "placeholders": {
+      "net": {
+        "type": "String"
+      },
+      "wins": {
+        "type": "String"
+      },
+      "losses": {
+        "type": "String"
+      },
+      "draws": {
+        "type": "String"
+      }
+    }
+  },
+  "demoAccountSwitch": "Demo account (practice money)",
+  "realTitle": "Switch to REAL money?",
+  "realBody": "Trades will use your real Quotex balance. Losses are real.",
+  "useReal": "Use real account",
+  "bot": "Bot",
+  "runningWaiting": "{count, plural, =0{Running · no signals waiting} =1{Running · 1 signal waiting} other{Running · {count} signals waiting}}",
+  "@runningWaiting": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "stopped": "Stopped",
+  "stop": "Stop",
+  "pasteSignals": "Paste signals",
+  "logout": "Log out",
+  "signalsHint": "Paste the Telegram signal list here\ne.g. M1 EURUSD-OTC 14:30 CALL",
+  "pasteFromClipboard": "Paste",
+  "listTimezone": "List timezone: {tz} (from Settings; a \"UTC+6\" written in the list wins)",
+  "@listTimezone": {
+    "placeholders": {
+      "tz": {
+        "type": "String"
+      }
+    }
+  },
+  "notConnectedNames": "Not connected: pair names not checked",
+  "signalsFound": "{count, plural, =0{No signals found} =1{1 signal found} other{{count} signals found}}",
+  "@signalsFound": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "minutes": "{n, plural, =1{1 min} other{{n} min}}",
+  "@minutes": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "seconds": "{n} s",
+  "@seconds": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "pairNotFound": "Pair not found on Quotex: this line is skipped",
+  "connectFirst": "Connect first",
+  "startTrading": "Start trading ({count})",
+  "@startTrading": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "scheduled": "{count, plural, =0{No signals scheduled} =1{1 signal scheduled} other{{count} signals scheduled}}",
+  "@scheduled": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "stopBot": "Stop bot",
+  "waiting": "Waiting ({count})",
+  "@waiting": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "log": "Log",
+  "logEmpty": "Nothing yet",
+  "thisSession": "This session",
+  "today": "Today",
+  "allTime": "All time ({account})",
+  "@allTime": {
+    "placeholders": {
+      "account": {
+        "type": "String"
+      }
+    }
+  },
+  "netProfit": "Net profit",
+  "winRate": "Win rate",
+  "trades": "Trades",
+  "wld": "W / L / D",
+  "signalsWon": "Signals won",
+  "wonAfterGale": "Won after martingale",
+  "maxDrawdown": "Max drawdown",
+  "worstStreak": "Worst streak",
+  "lossesCount": "{n, plural, =0{no losses} =1{1 loss} other{{n} losses}}",
+  "@lossesCount": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "recentTrades": "Recent trades",
+  "noTrades": "No trades yet",
+  "entryPending": "pending",
+  "entryDirect": "direct",
+  "galeTag": "G{level}",
+  "@galeTag": {
+    "placeholders": {
+      "level": {
+        "type": "String"
+      }
+    }
+  },
+  "language": "Language",
+  "languageSystem": "Phone language",
+  "stopToChange": "Stop the bot to change settings",
+  "amountLabel": "Trade amount ($)",
+  "amountHelp": "Stake for each signal",
+  "tzLabel": "Signal list timezone (UTC hours)",
+  "tzHelp": "e.g. -3 for UTC-3, 1 for Algeria, 5.5 for UTC+5:30",
+  "galesLabel": "Martingale levels",
+  "offHelp": "0 = off",
+  "multLabel": "Martingale multiplier",
+  "multHelp": "Next stake = stake × this",
+  "minPayoutLabel": "Minimum payout (%)",
+  "minPayoutHelp": "Skip a signal when the payout is lower",
+  "stopLossLabel": "Daily stop-loss ($)",
+  "takeProfitLabel": "Daily take-profit ($)",
+  "pendingTitle": "Pending orders for OTC",
+  "pendingSub": "Quotex opens the trade itself at the exact minute",
+  "overlapTitle": "Allow overlapping signals",
+  "overlapSub": "Off: one signal per minute, a list signal beats a martingale",
+  "autoTiming": "Automatic entry timing",
+  "autoTimingSub": "Send direct orders half a ping before the minute",
+  "preEntryLabel": "Pre-entry (ms)",
+  "preEntryHelp": "Send this many ms before the minute",
+  "notifTrading": "QXBot is trading",
+  "notifToday": "QXBot · today {net} ({wins}W {losses}L)",
+  "@notifToday": {
+    "placeholders": {
+      "net": {
+        "type": "String"
+      },
+      "wins": {
+        "type": "String"
+      },
+      "losses": {
+        "type": "String"
+      }
+    }
+  },
+  "channelName": "QXBot trading",
+  "channelDesc": "Bot running and trade results",
+  "evConnected": "Connected to Quotex ({account} account)",
+  "@evConnected": {
+    "placeholders": {
+      "account": {
+        "type": "String"
+      }
+    }
+  },
+  "evConnectFailed": "Connect failed: {error}",
+  "@evConnectFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "evStopped": "Stopped",
+  "evAllDone": "All signals done",
+  "evSkipped": "{time} {pair} {dir} skipped: {reason}",
+  "@evSkipped": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      },
+      "pair": {
+        "type": "String"
+      },
+      "dir": {
+        "type": "String"
+      },
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "rOverlap": "another signal has this minute (overlap off)",
+  "rStopLoss": "daily stop-loss reached (today {net})",
+  "@rStopLoss": {
+    "placeholders": {
+      "net": {
+        "type": "String"
+      }
+    }
+  },
+  "rTakeProfit": "daily take-profit reached (today {net})",
+  "@rTakeProfit": {
+    "placeholders": {
+      "net": {
+        "type": "String"
+      }
+    }
+  },
+  "rBalance": "balance {balance} can't cover {amount}",
+  "@rBalance": {
+    "placeholders": {
+      "balance": {
+        "type": "String"
+      },
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "rNotConnected": "not connected",
+  "rPairNotFound": "pair not found on Quotex",
+  "rPairClosed": "Quotex has this pair closed right now",
+  "rPayout": "payout {payout}% < {min}%",
+  "@rPayout": {
+    "placeholders": {
+      "payout": {
+        "type": "String"
+      },
+      "min": {
+        "type": "String"
+      }
+    }
+  },
+  "rStopped": "stopped",
+  "evConnectionLost": "Connection lost, logging in again...",
+  "evReconnectFailed": "Reconnect failed: {error}",
+  "@evReconnectFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "evOrderNotConfirmed": "{pair} order not confirmed (pair closed or amount invalid?)",
+  "@evOrderNotConfirmed": {
+    "placeholders": {
+      "pair": {
+        "type": "String"
+      }
+    }
+  },
+  "evOrderRejected": "{pair} {dir} rejected by Quotex: {error}",
+  "@evOrderRejected": {
+    "placeholders": {
+      "pair": {
+        "type": "String"
+      },
+      "dir": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "evOrderOpened": "{pair} {dir} {amount} opened {delay} ms vs {at} (sent {sent} ms, ping {ping} ms) open {price}",
+  "@evOrderOpened": {
+    "placeholders": {
+      "pair": {
+        "type": "String"
+      },
+      "dir": {
+        "type": "String"
+      },
+      "amount": {
+        "type": "String"
+      },
+      "delay": {
+        "type": "String"
+      },
+      "at": {
+        "type": "String"
+      },
+      "sent": {
+        "type": "String"
+      },
+      "ping": {
+        "type": "String"
+      },
+      "price": {
+        "type": "String"
+      }
+    }
+  },
+  "evPendingSet": "{pair} {dir} {amount} pending order set for {at} (Quotex opens it)",
+  "@evPendingSet": {
+    "placeholders": {
+      "pair": {
+        "type": "String"
+      },
+      "dir": {
+        "type": "String"
+      },
+      "amount": {
+        "type": "String"
+      },
+      "at": {
+        "type": "String"
+      }
+    }
+  },
+  "evPendingNoTicket": "{pair} pending reply without a ticket: skipped (no risk of a double entry)",
+  "@evPendingNoTicket": {
+    "placeholders": {
+      "pair": {
+        "type": "String"
+      }
+    }
+  },
+  "evPendingCancelled": "{pair} pending order cancelled: {reason}",
+  "@evPendingCancelled": {
+    "placeholders": {
+      "pair": {
+        "type": "String"
+      },
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "evPendingOpened": "{pair} {dir} {amount} opened {delay} ms vs {at} by Quotex (pending) open {price}",
+  "@evPendingOpened": {
+    "placeholders": {
+      "pair": {
+        "type": "String"
+      },
+      "dir": {
+        "type": "String"
+      },
+      "amount": {
+        "type": "String"
+      },
+      "delay": {
+        "type": "String"
+      },
+      "at": {
+        "type": "String"
+      },
+      "price": {
+        "type": "String"
+      }
+    }
+  },
+  "evPendingNoAnswer": "{pair} pending order not confirmed: skipped (no risk of a double entry)",
+  "@evPendingNoAnswer": {
+    "placeholders": {
+      "pair": {
+        "type": "String"
+      }
+    }
+  },
+  "evPendingFailed": "{pair} pending order failed ({error}): entering directly",
+  "@evPendingFailed": {
+    "placeholders": {
+      "pair": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "evGaleReady": "{pair} losing with 5 s left, martingale {level} ready",
+  "@evGaleReady": {
+    "placeholders": {
+      "pair": {
+        "type": "String"
+      },
+      "level": {
+        "type": "String"
+      }
+    }
+  },
+  "evGaleCancelled": "Martingale on {pair} cancelled: a list signal has {at} (overlap off)",
+  "@evGaleCancelled": {
+    "placeholders": {
+      "pair": {
+        "type": "String"
+      },
+      "at": {
+        "type": "String"
+      }
+    }
+  },
+  "evGaleStart": "Martingale {level} on {pair}: {amount}",
+  "@evGaleStart": {
+    "placeholders": {
+      "level": {
+        "type": "String"
+      },
+      "pair": {
+        "type": "String"
+      },
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "evResultNotReceived": "{pair} result not received (check Quotex history)",
+  "@evResultNotReceived": {
+    "placeholders": {
+      "pair": {
+        "type": "String"
+      }
+    }
+  },
+  "evResult": "{pair} {dir}{gale}: {result} {profit}",
+  "@evResult": {
+    "placeholders": {
+      "pair": {
+        "type": "String"
+      },
+      "dir": {
+        "type": "String"
+      },
+      "gale": {
+        "type": "String"
+      },
+      "result": {
+        "type": "String"
+      },
+      "profit": {
+        "type": "String"
+      }
+    }
+  },
+  "evError": "{pair} error: {error}",
+  "@evError": {
+    "placeholders": {
+      "pair": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "evClockWarning": "Phone clock is {offset} s off Quotex: timing is corrected automatically",
+  "@evClockWarning": {
+    "placeholders": {
+      "offset": {
+        "type": "String"
+      }
+    }
+  }
+}

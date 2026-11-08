@@ -115,15 +115,28 @@ class Lock {
   }
 }
 
-double nowS() => DateTime.now().millisecondsSinceEpoch / 1000;
+/// Something the engine reports. The UI turns [key] + [args] into text in the user's language
+/// (lib/core stays free of user-facing strings). Args: `pair` symbol, `dir` call|put, `time` HH:MM as
+/// written in the list, `at` unix seconds (Quotex time), amounts/profits as doubles, `reason` a nested event.
+class EngineEvent {
+  final String key;
+  final Map<String, Object?> args;
+  const EngineEvent(this.key, [this.args = const {}]);
+  @override
+  String toString() => args.isEmpty ? key : '$key ${args.map((k, v) => MapEntry(k, '$v'))}'; // CLI/debug only
+}
 
 class Engine {
   final QuotexClient q;
   final Settings cfg;
   final List<Trade> history; // all trades (persisted by the caller via onTrade)
-  final void Function(String) log;
+  final void Function(EngineEvent) report;
   final void Function(Trade)? onTrade;
-  Engine(this.q, this.cfg, this.history, this.log, {this.onTrade}) {
+
+  /// Quotex time in unix seconds; every timing decision uses it (defaults to the client's server clock).
+  final double Function() now;
+  Engine(this.q, this.cfg, this.history, this.report, {this.onTrade, double Function()? now})
+      : now = now ?? q.clock.now {
     q.on(_onEvent);
   }
 
@@ -139,6 +152,9 @@ class Engine {
   String? _pendingAsset;
   final scheduled = <Signal>[]; // signals still running; Stop clears it, so old runs end even after a restart
   final started = DateTime.now();
+  bool _clockWarned = false;
+
+  void _say(String key, [Map<String, Object?> args = const {}]) => report(EngineEvent(key, args));
 
   double get ping {
     if (pings.isEmpty) return 0.5;
@@ -146,16 +162,35 @@ class Engine {
     return s[s.length ~/ 2];
   }
 
+  void _addPing(double seconds) {
+    pings.add(seconds);
+    if (pings.length > 20) pings.removeAt(0);
+    q.clock.roundTrip(ping);
+  }
+
   int preMs() => cfg.preEntryMs ?? min(600, max(50, (ping * 500).round()));
   double lead() => max(0.5, preMs() / 1000 + 0.3);
 
+  /// Sleep until Quotex time [t], in steps of at most 2 s: a clock correction (or a phone clock step) learnt
+  /// meanwhile still applies to the final approach.
   Future<void> sleepUntil(double t) async {
-    final ms = ((t - nowS()) * 1000).round();
-    if (ms > 0) await Future.delayed(Duration(milliseconds: ms));
+    while (true) {
+      final left = t - now();
+      if (left <= 0) return;
+      await Future.delayed(Duration(microseconds: (min(left, 2.0) * 1e6).round()));
+    }
+  }
+
+  /// Warn once when the phone clock is more than 1 s off (the engine corrects it either way).
+  void checkClock() {
+    final o = q.clock.offset;
+    if (o != null && o.abs() > 1 && !_clockWarned) {
+      _clockWarned = true;
+      _say('clockWarning', {'offset': o});
+    }
   }
 
   void _onEvent(String name, dynamic data) {
-    if (name.contains('pending')) log('  quotex $name ${_short(data)}'); // shortcut: raw log until pending replies are fully mapped
     if (name == 's_pending/create' || name == 'f_pending/create') {
       // Another app on the same account gets these too: only take a reply for our pair.
       final asset = data is Map && data['pending'] is Map ? (data['pending'] as Map)['asset'] : null;
@@ -166,7 +201,11 @@ class Engine {
     // Quotex also sends f_pending/opened WITHOUT an error for orders it then opens normally (seen on demo
     // 2026-11-07: f_ at :00.4, s_pending/opened at :04.7, order opened): only an error code is a failure.
     if (name == 'f_pending/opened' && data is Map && data['ticket'] != null && data['error'] != null) {
-      _pendingOpened.remove('${data['ticket']}')?.complete({'error': 'pending failed (code ${data['error']})'});
+      _pendingOpened.remove('${data['ticket']}')?.complete({'error': 'code ${data['error']}'});
+    }
+    if (name == 's_orders/open' && data is Map && data['openTimestamp'] is num) {
+      // sanity bound for the clock: the open time is a past Quotex time, like a tick's
+      q.clock.sample((data['openTimestamp'] as num) + ((data['openMs'] as num?) ?? 0) / 1000);
     }
     if ((name == 's_orders/open' || name == 'f_orders/open') && data is Map) {
       final c = _pendingOpened.remove('${data['id']}') ??
@@ -186,6 +225,7 @@ class Engine {
         c != null ? c.complete(profit) : _earlyResults[id] = profit;
       }
     }
+    checkClock();
   }
 
   // ------------------------------------------------------------ limits
@@ -197,19 +237,24 @@ class Engine {
         .fold(0.0, (a, t) => a + t.profit);
   }
 
-  String? limitReason([double openLoss = 0]) {
+  /// Daily stop-loss / take-profit on realised profit, minus a trade that is losing right now.
+  EngineEvent? limitReason([double openLoss = 0]) {
     final net = todayNet() - openLoss;
-    if (cfg.stopLoss > 0 && net <= -cfg.stopLoss) return 'daily stop-loss reached (today ${_money(net)})';
-    if (cfg.takeProfit > 0 && net >= cfg.takeProfit) return 'daily take-profit reached (today ${_money(net)})';
+    if (cfg.stopLoss > 0 && net <= -cfg.stopLoss) return EngineEvent('stopLoss', {'net': net});
+    if (cfg.takeProfit > 0 && net >= cfg.takeProfit) return EngineEvent('takeProfit', {'net': net});
     return null;
   }
 
+  Map<String, Object?> _sig(Signal s) => {'time': s.hhmm, 'pair': s.asset, 'dir': s.direction};
+
+  void _skip(Signal s, String reason, [Map<String, Object?> args = const {}]) =>
+      _say('skipped', {..._sig(s), 'reason': EngineEvent(reason, args)});
+
   bool canTrade(Signal s, double amount, {double openLoss = 0}) {
     var reason = limitReason(openLoss);
-    if (reason == null && amount > (q.balance ?? 0)) {
-      reason = "balance ${(q.balance ?? 0).toStringAsFixed(2)} can't cover ${amount.toStringAsFixed(2)}";
-    }
-    if (reason != null) log('${s.hhmm} ${s.asset} ${s.direction.toUpperCase()} skipped: $reason');
+    final balance = q.balance ?? 0;
+    if (reason == null && amount > balance) reason = EngineEvent('balance', {'balance': balance, 'amount': amount});
+    if (reason != null) _say('skipped', {..._sig(s), 'reason': reason});
     return reason == null;
   }
 
@@ -219,7 +264,7 @@ class Engine {
     for (final s in signals) {
       final at = s.at.millisecondsSinceEpoch ~/ 1000;
       if (!cfg.overlap && taken.contains(at)) {
-        log('${s.hhmm} ${s.asset} ${s.direction.toUpperCase()} skipped: another signal has this minute (overlap off)');
+        _skip(s, 'overlap');
         continue;
       }
       taken.add(at);
@@ -235,7 +280,9 @@ class Engine {
     final kept = schedule(signals);
     scheduled.addAll(kept);
     for (final s in kept) {
-      runSignal(s).catchError((e) => log('${s.asset} error: $e')).whenComplete(() => scheduled.remove(s));
+      runSignal(s)
+          .catchError((e) => _say('error', {'pair': s.asset, 'error': '$e'}))
+          .whenComplete(() => scheduled.remove(s));
     }
     return kept;
   }
@@ -250,12 +297,12 @@ class Engine {
           if (q.alive) return true;
           await Future.delayed(const Duration(seconds: 1));
         }
-        log('Connection lost, logging in again...');
+        _say('connectionLost');
         try {
           await q.connect();
           return true;
         } catch (e) {
-          log('Reconnect failed: $e');
+          _say('reconnectFailed', {'error': '$e'});
           return false;
         }
       });
@@ -273,7 +320,7 @@ class Engine {
     return p != null && o != null && isLosing(s.direction, o, p);
   }
 
-  /// Direct order for the candle starting at [at] (unix s).
+  /// Direct order for the candle starting at [at] (unix s, Quotex time).
   Future<Map?> place(Signal s, int at, double amount) async {
     final requestId = '${++_requestId}'; // unique, Quotex dedupes
     final payload = {
@@ -288,29 +335,29 @@ class Engine {
       await _waitEntry(s, at);
       _orders[requestId] = _orders[s.asset] = c;
       q.emit('orders/open', payload);
-      sent = nowS();
+      sent = now();
     });
     Map data;
     try {
       data = await c.future.timeout(const Duration(seconds: 10));
-      pings.add(nowS() - sent);
-      if (pings.length > 20) pings.removeAt(0);
+      _addPing(now() - sent);
     } on TimeoutException {
-      log('${s.asset} order not confirmed (pair closed or amount invalid?)');
+      _say('orderNotConfirmed', {'pair': s.asset});
       return null;
     } finally {
       _orders.remove(requestId);
       _orders.remove(s.asset);
     }
     if (data.containsKey('error')) {
-      log('${s.asset} ${s.direction.toUpperCase()} REJECTED by Quotex: ${data['error']}');
+      _say('orderRejected', {..._sig(s), 'error': '${data['error']}'});
       return null;
     }
     data = Map.of(data);
     data['delay_ms'] = _delay(data, at);
-    log('${s.asset} ${s.direction.toUpperCase()} \$$amount opened ${_signed(data['delay_ms'])}ms vs ${_clock(at)} '
-        '(sent ${_signed(((sent - at) * 1000).round())}ms, ping ${((pings.lastOrNull ?? 0) * 1000).round()}ms) '
-        'open=${data['openPrice']}');
+    _say('orderOpened', {
+      ..._sig(s), 'amount': amount, 'delay': data['delay_ms'], 'at': at, 'sent': ((sent - at) * 1000).round(),
+      'ping': ((pings.lastOrNull ?? 0) * 1000).round(), 'price': data['openPrice'],
+    });
     return data;
   }
 
@@ -325,7 +372,7 @@ class Engine {
       final times = [for (final t in q.ticks[s.asset] ?? <(double, double)>[]) t.$1];
       if (medianGap(times) < ping) return;
     }
-    while (q.tickTime(s.asset) < at && nowS() < at + 1.5) {
+    while (q.tickTime(s.asset) < at && now() < at + 1.5) {
       await Future.delayed(const Duration(milliseconds: 2));
     }
   }
@@ -340,36 +387,36 @@ class Engine {
     final reply = await pendingLock.run(() async {
       _pendingReply = Completer();
       _pendingAsset = s.asset;
-      final sent = nowS();
+      final sent = now();
       q.emit('pending/create', payload);
       try {
         final r = await _pendingReply!.future.timeout(const Duration(seconds: 10));
-        pings.add(nowS() - sent);
+        _addPing(now() - sent);
         return r;
       } on TimeoutException {
-        return {'error': 'no reply to pending/create'};
+        return {'error': 'no reply'};
       }
     });
     if (reply.containsKey('error')) return reply;
     final t = (reply['pending'] as Map?)?['ticket'];
     if (t == null) {
-      log('${s.asset} pending reply without ticket: skipped (no risk of a double entry)');
+      _say('pendingNoTicket', {'pair': s.asset});
       return null;
     }
     final ticket = '$t';
     final c = _pendingOpened[ticket] = Completer();
-    log('${s.asset} ${s.direction.toUpperCase()} \$$amount pending order set for ${_clock(at)} (Quotex opens it)');
+    _say('pendingSet', {..._sig(s), 'amount': amount, 'at': at});
     await sleepUntil(at - 3.0);
-    final reason = scheduled.contains(s) ? limitReason() : 'stopped';
+    final reason = scheduled.contains(s) ? limitReason() : const EngineEvent('stopped');
     if (reason != null) {
       q.emit('pending/cancel', {'ticket': ticket});
-      log('${s.asset} pending order cancelled: $reason');
+      _say('pendingCancelled', {'pair': s.asset, 'reason': reason});
       _pendingOpened.remove(ticket);
       return {'error': 'cancelled', 'cancelled': true};
     }
     Map data;
     try {
-      data = await c.future.timeout(Duration(milliseconds: ((at + 15 - nowS()) * 1000).round()));
+      data = await c.future.timeout(Duration(milliseconds: max(0, ((at + 15 - now()) * 1000).round())));
     } on TimeoutException {
       return null;
     } finally {
@@ -378,8 +425,7 @@ class Engine {
     if (data.containsKey('error')) return data;
     data = Map.of(data);
     data['delay_ms'] = _delay(data, at);
-    log('${s.asset} ${s.direction.toUpperCase()} \$$amount opened ${_signed(data['delay_ms'])}ms vs ${_clock(at)} '
-        'by Quotex (pending) open=${data['openPrice']}');
+    _say('pendingOpened', {..._sig(s), 'amount': amount, 'delay': data['delay_ms'], 'at': at, 'price': data['openPrice']});
     return data;
   }
 
@@ -387,26 +433,24 @@ class Engine {
     var at = s.at.millisecondsSinceEpoch ~/ 1000;
     var amount = cfg.amount;
     final signal = '${s.at.toIso8601String()} ${s.asset} ${s.direction}';
-    final usePending = cfg.pending && s.asset.endsWith('_otc') && at - nowS() > 70;
+    final usePending = cfg.pending && s.asset.endsWith('_otc') && at - now() > 70;
     await sleepUntil(at - (usePending ? 70.0 : 15.0));
     if (!scheduled.contains(s)) return;
-    if (!await ensureConnected()) return log('${s.hhmm} ${s.asset} skipped: not connected');
+    if (!await ensureConnected()) return _skip(s, 'notConnected');
     final info = await instrument(s.asset);
-    if (info == null) return log('${s.hhmm} ${s.asset} skipped: pair not found on Quotex');
-    if (info[14] != true) return log('${s.hhmm} ${s.asset} skipped: Quotex has this pair closed right now');
+    if (info == null) return _skip(s, 'pairNotFound');
+    if (info[14] != true) return _skip(s, 'pairClosed');
     final payout = info[s.duration < 300 ? 18 : 19];
-    if (payout is num && payout < cfg.minPayout) {
-      return log('${s.hhmm} ${s.asset} ${s.direction.toUpperCase()} skipped: payout $payout% < ${cfg.minPayout}%');
-    }
+    if (payout is num && payout < cfg.minPayout) return _skip(s, 'payout', {'payout': payout, 'min': cfg.minPayout});
     if (!canTrade(s, amount)) return;
     Map? data;
     var kind = 'pending';
     if (usePending) {
       data = await placePending(s, at, amount);
       if (data?['cancelled'] == true) return;
-      if (data == null || data.containsKey('error')) {
-        log('${s.asset} pending order ${data == null ? 'not confirmed: checking' : '${data['error']}: entering directly'}');
-        if (data == null) return; // no answer: don't risk a double entry
+      if (data == null) return _say('pendingNoAnswer', {'pair': s.asset}); // don't risk a double entry
+      if (data.containsKey('error')) {
+        _say('pendingFailed', {'pair': s.asset, 'error': '${data['error']}'});
         data = null;
       }
     }
@@ -423,17 +467,17 @@ class Engine {
       await sleepUntil(end - 5.0);
       if (!galeBlocked(end)) {
         await chart.run(() async => q.show(s.asset, s.duration, end + s.duration));
-        if (_losing(s, data)) log('${s.asset} losing with 5s left, gale ${level + 1} ready');
+        if (_losing(s, data)) _say('galeReady', {'pair': s.asset, 'level': level + 1});
       }
       await sleepUntil(end - lead()); // final call just before expiry: a late reversal can still save it
       if (!scheduled.contains(s) || !_losing(s, data)) return;
-      if (galeBlocked(end)) return log('gale on ${s.asset} cancelled: a list signal has ${_clock(end)} (overlap off)');
+      if (galeBlocked(end)) return _say('galeCancelledOverlap', {'pair': s.asset, 'at': end});
       final nextAmount = (amount * cfg.galeMultiplier * 100).round() / 100;
       if (!canTrade(s, nextAmount, openLoss: amount)) return;
       at = end;
       amount = nextAmount;
       data = null;
-      log('gale ${level + 1} on ${s.asset}: \$$amount');
+      _say('galeStart', {'pair': s.asset, 'level': level + 1, 'amount': amount});
     }
   }
 
@@ -442,13 +486,13 @@ class Engine {
     final id = '${data['id']}';
     final c = _results[id] = Completer();
     if (_earlyResults.containsKey(id)) c.complete(_earlyResults.remove(id));
-    final closeAt = ((data['closeTimestamp'] as num?) ?? nowS() + s.duration).toDouble();
+    final closeAt = ((data['closeTimestamp'] as num?) ?? now() + s.duration).toDouble();
     double profit;
     try {
-      profit = await c.future.timeout(Duration(milliseconds: ((closeAt + 30 - nowS()) * 1000).round()));
+      profit = await c.future.timeout(Duration(milliseconds: max(0, ((closeAt + 30 - now()) * 1000).round())));
     } on TimeoutException {
       _results.remove(id);
-      return log('${s.asset} result not received (check Quotex history)');
+      return _say('resultNotReceived', {'pair': s.asset});
     }
     final result = profit > 0 ? 'win' : profit < 0 ? 'loss' : 'draw';
     final t = Trade(DateTime.fromMillisecondsSinceEpoch(((data['openTimestamp'] as num) * 1000).round()), cfg.demo,
@@ -457,18 +501,6 @@ class Engine {
     history.add(t);
     onTrade?.call(t);
     q.emit('balance/list'); // closes don't carry the new balance
-    log('${s.asset} ${s.direction.toUpperCase()}${level > 0 ? ' G$level' : ''}: ${result.toUpperCase()} ${_money(profit)}');
+    _say('result', {..._sig(s), 'level': level, 'result': result, 'profit': profit});
   }
-}
-
-String _short(dynamic d) {
-  final t = '$d';
-  return t.length > 300 ? '${t.substring(0, 300)}...' : t;
-}
-
-String _money(double v) => '${v >= 0 ? '+' : ''}${v.toStringAsFixed(2)}';
-String _signed(dynamic v) => '${v >= 0 ? '+' : ''}$v';
-String _clock(int unix) {
-  final d = DateTime.fromMillisecondsSinceEpoch(unix * 1000);
-  return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}:${d.second.toString().padLeft(2, '0')}';
 }

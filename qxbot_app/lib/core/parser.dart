@@ -68,8 +68,12 @@ SymbolIndex symbolIndex(List<(String, String)> names) {
 
 String _lstripHash(String s) => s.replaceFirst(RegExp(r'^#+'), '');
 
+/// NFKC + Arabic-Indic digits (٠-٩, ۰-۹) as ASCII: Python's `\d`/int() in signals.py accept them, Dart's don't.
+String _normalize(String text) => unorm.nfkc(text).replaceAllMapped(RegExp('[\u0660-\u0669\u06F0-\u06F9]'),
+    (m) => '${m[0]!.codeUnitAt(0) & 0xF}');
+
 String _clean(String line) =>
-    unorm.nfkc(line).toUpperCase().replaceAllMapped(_pairSepRe, (m) => '${m[1]}${m[2]}');
+    _normalize(line).toUpperCase().replaceAllMapped(_pairSepRe, (m) => '${m[1]}${m[2]}');
 
 String? _pair(String line, SymbolIndex? index) {
   for (final m in _tokenRe.allMatches(line)) {
@@ -131,7 +135,7 @@ Map<String, Object> _fields(String raw, SymbolIndex? index) {
 
 /// Timezone written in the list (UTC-3, GMT+1, (UTC +6:00)), or null.
 Duration? listTimezone(String text) {
-  final m = _tzRe.firstMatch(unorm.nfkc(text).toUpperCase());
+  final m = _tzRe.firstMatch(_normalize(text).toUpperCase());
   if (m == null) return null;
   final sign = (m[1] == '-' || m[1] == '−') ? -1 : 1;
   return Duration(hours: int.parse(m[2]!), minutes: int.parse(m[3] ?? '0')) * sign;
