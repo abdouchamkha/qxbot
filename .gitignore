@@ -8,3 +8,4 @@ browser_profile/
 .pytest_cache/
 trades*.csv
 *.log
+.env
