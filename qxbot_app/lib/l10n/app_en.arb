@@ -769,6 +769,7 @@
       }
     }
   },
+  "backtestOnly": "Backtest only (no trades)",
   "readWithAi": "Read with AI",
   "aiReading": "AI is reading the list...",
   "aiReadNote": "Read by AI: check every line before you start.",

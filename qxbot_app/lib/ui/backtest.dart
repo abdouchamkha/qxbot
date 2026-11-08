@@ -50,6 +50,8 @@ class _BacktestPageState extends State<BacktestPage> {
     text.text = widget.text ?? '';
     text.addListener(_defaultTz);
     _defaultTz();
+    // Opened from a pasted list ("Backtest only"): run at once.
+    if (text.text.trim().isNotEmpty) WidgetsBinding.instance.addPostFrameCallback((_) => _run());
   }
 
   int? _lastDefault;

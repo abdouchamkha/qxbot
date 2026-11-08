@@ -927,6 +927,9 @@ class LAr extends L {
   }
 
   @override
+  String get backtestOnly => 'اختبار فقط (بدون تداول)';
+
+  @override
   String get readWithAi => 'القراءة بالذكاء الاصطناعي';
 
   @override

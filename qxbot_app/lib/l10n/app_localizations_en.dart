@@ -910,6 +910,9 @@ class LEn extends L {
   }
 
   @override
+  String get backtestOnly => 'Backtest only (no trades)';
+
+  @override
   String get readWithAi => 'Read with AI';
 
   @override

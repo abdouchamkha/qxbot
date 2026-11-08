@@ -1540,6 +1540,12 @@ abstract class L {
   /// **'{count, plural, =1{1 signal already passed: backtest it} other{{count} signals already passed: backtest them}}'**
   String passedSignals(int count);
 
+  /// No description provided for @backtestOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Backtest only (no trades)'**
+  String get backtestOnly;
+
   /// No description provided for @readWithAi.
   ///
   /// In en, this message translates to:

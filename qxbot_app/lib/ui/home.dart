@@ -337,18 +337,18 @@ class _PreviewSheetState extends State<PreviewSheet> {
                 child: OutlinedButton.icon(
                     onPressed: _ai, icon: const Icon(Icons.auto_awesome, color: blue), label: Text(l.readWithAi)),
               ),
-            if (passed.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    openBacktest(context, app, widget.text);
-                  },
-                  icon: const Icon(Icons.history),
-                  label: Text(l.passedSignals(passed.length)),
-                ),
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                onPressed: () {
+                  Navigator.pop(context);
+                  openBacktest(context, app, widget.text);
+                },
+                icon: const Icon(Icons.history),
+                label: Text(passed.isNotEmpty ? l.passedSignals(passed.length) : l.backtestOnly),
               ),
+            ),
             gap12,
             Row(children: [
               OutlinedButton(
@@ -483,13 +483,14 @@ class _ListEditorPageState extends State<ListEditorPage> {
                 label: Text(l.readWithAi),
               ),
             ),
-          if (passedCount > 0)
+          if (text.text.trim().isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
                 onPressed: () => openBacktest(context, app, text.text),
                 icon: const Icon(Icons.history),
-                label: Text(l.passedSignals(passedCount)),
+                label: Text(passedCount > 0 ? l.passedSignals(passedCount) : l.backtestOnly),
               ),
             ),
           gap16,

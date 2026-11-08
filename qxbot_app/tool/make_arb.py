@@ -284,6 +284,7 @@ T = {
  "noData": ("no data", "بلا بيانات"),
  "passedSignals": ("{count, plural, =1{1 signal already passed: backtest it} other{{count} signals already passed: backtest them}}",
                    "{count, plural, =1{إشارة واحدة فات وقتها: اختبرها} =2{إشارتان فات وقتهما: اختبرهما} few{{count} إشارات فات وقتها: اختبرها} other{{count} إشارة فات وقتها: اختبرها}}"),
+ "backtestOnly": ("Backtest only (no trades)", "اختبار فقط (بدون تداول)"),
  "readWithAi": ("Read with AI", "القراءة بالذكاء الاصطناعي"),
  "aiReading": ("AI is reading the list...", "الذكاء الاصطناعي يقرأ القائمة..."),
  "aiReadNote": ("Read by AI: check every line before you start.", "قرأها الذكاء الاصطناعي: راجع كل سطر قبل البدء."),

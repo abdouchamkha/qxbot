@@ -22,7 +22,7 @@ const I18N = {
     paste_title: "Paste your signal list", paste_ph: "Paste the list from Telegram here…\n\nM1 EURUSD-OTC 14:30 CALL\nM1 GBPJPY 14:35 PUT",
     preview: "Preview", upcoming: "Upcoming", passed: "Already passed", unknown: "Not understood (pair not on Quotex?)",
     tz: "Timezone", tz_list: "written in the list", tz_profile: "from Settings", start: "Start trading",
-    backtest: "Backtest", backtest_tz: "Try other timezones (optional)", backtest_sub: "Checks every signal at its last time in the past 24 h on Quotex candles, with your martingale.",
+    backtest: "Backtest", bt_only: "Backtest only (no trades)", backtest_tz: "Try other timezones (optional)", backtest_sub: "Checks every signal at its last time in the past 24 h on Quotex candles, with your martingale.",
     dup: "same minute, skipped", empty_preview: "Signals show here as you paste.",
     not_checked: "Pair names are checked against Quotex once you are connected.", clear: "Clear",
     trades_tab: "Trades", log_tab: "Details log", copy: "Copy", copied: "Copied",
@@ -66,7 +66,7 @@ const I18N = {
     paste_title: "الصق قائمة الإشارات", paste_ph: "الصق القائمة من تيليجرام هنا…\n\nM1 EURUSD-OTC 14:30 CALL\nM1 GBPJPY 14:35 PUT",
     preview: "معاينة", upcoming: "القادمة", passed: "فات وقتها", unknown: "غير مفهومة (الزوج غير موجود في Quotex؟)",
     tz: "التوقيت", tz_list: "مكتوب في القائمة", tz_profile: "من الإعدادات", start: "ابدأ التداول",
-    backtest: "اختبار خلفي", backtest_tz: "جرّب توقيتات أخرى (اختياري)", backtest_sub: "يفحص كل إشارة في آخر وقت لها خلال 24 ساعة على شموع Quotex، مع المضاعفة.",
+    backtest: "اختبار خلفي", bt_only: "اختبار فقط (بدون تداول)", backtest_tz: "جرّب توقيتات أخرى (اختياري)", backtest_sub: "يفحص كل إشارة في آخر وقت لها خلال 24 ساعة على شموع Quotex، مع المضاعفة.",
     dup: "نفس الدقيقة، تُتجاهل", empty_preview: "تظهر الإشارات هنا أثناء اللصق.",
     not_checked: "تُفحص أسماء الأزواج على Quotex بعد الاتصال.", clear: "مسح",
     trades_tab: "الصفقات", log_tab: "السجل التفصيلي", copy: "نسخ", copied: "تم النسخ",
@@ -389,12 +389,12 @@ function signalsHTML() {
       <textarea class="input" id="paste" dir="auto" spellcheck="false" placeholder="${esc(t("paste_ph"))}">${esc(draft)}</textarea>
       <div style="display:flex;gap:12px;margin-top:16px;flex-wrap:wrap">
         <button class="btn btn-go btn-big" id="start-btn" style="flex:1" disabled>${icon("play")}${t("start")}</button>
+        <button class="btn btn-big" id="bt-btn">${icon("flask")}${t("bt_only")}</button>
       </div>
       <details class="adv" style="margin-top:18px"><summary>${icon("flask").replace("<svg", '<svg width="18" height="18"')}${t("backtest")}</summary>
         <p class="muted" style="margin:10px 0">${t("backtest_sub")}</p>
         <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
-          <label class="field" style="flex:1;min-width:160px"><span>${t("backtest_tz")}</span><input class="input ltr" id="bt-tz" placeholder="-3 +1 5.5"></label>
-          <button class="btn" id="bt-btn">${icon("flask")}${t("backtest")}</button></div>
+          <label class="field" style="flex:1;min-width:160px"><span>${t("backtest_tz")}</span><input class="input ltr" id="bt-tz" placeholder="-3 +1 5.5"></label></div>
       </details>
     </div>
     <div class="grid">
