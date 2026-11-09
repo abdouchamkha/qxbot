@@ -4,6 +4,7 @@
 //   dart run tool/cli.dart <token-file> pending [PAIR]  one $1 pending order only
 //   dart run tool/cli.dart <token-file> candles [PAIR] [MIN]  read the last MIN 1-minute candles (history/load, no trade, no chart switch)
 //   dart run tool/cli.dart <token-file> backtest FILE [TZH]  backtest a list file's past signals (read-only)
+//   dart run tool/cli.dart <token-file> gale [PAIR]     CALL + PUT on one pending minute, 1 gale: the loser must gale
 //   dart run tool/cli.dart <token-file> clock [PAIR]    follow a pair's ticks for 20s and print the clock estimate (no trade)
 import 'dart:io';
 import 'dart:math';
@@ -110,6 +111,27 @@ Future<void> main(List<String> args) async {
     final s = summarize(e.history);
     say('stats: ${s.trades} trades ${s.wins}W ${s.losses}L ${s.draws}D net ${s.net.toStringAsFixed(2)} '
         'balance ${q.demoBalance}');
+  }
+  if (args.length > 1 && args[1] == 'gale') {
+    final pair = args.length > 2 ? args[2] : 'EURUSD_otc';
+    final cfg = Settings()
+      ..demo = true
+      ..gales = 1
+      ..galeMultiplier = 2
+      ..overlap = true
+      ..minPayout = 0;
+    final e = Engine(q, cfg, [], (ev) => say('$ev'));
+    final at = ((q.clock.now() + 80) ~/ 60 + 1) * 60;
+    Signal sig(String dir) =>
+        Signal(60, pair, DateTime.fromMillisecondsSinceEpoch(at * 1000, isUtc: true), Duration.zero, dir);
+    e.start([sig('call'), sig('put')]);
+    say('scheduled CALL and PUT on $pair at ${DateTime.fromMillisecondsSinceEpoch(at * 1000)} (pending), gales 1');
+    while (q.clock.now() < at + 200 && e.history.length < 3) {
+      await Future.delayed(const Duration(seconds: 1));
+    }
+    for (final t in e.history) {
+      say('  ${t.time} ${t.direction} level ${t.level} amount ${t.amount} ${t.entry} ${t.result} ${t.profit}');
+    }
   }
   await q.close();
   exit(0);

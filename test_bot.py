@@ -139,3 +139,15 @@ def test_past_signals_puts_every_time_in_last_24h_and_can_override_list_tz():
     s = past_signals(text, timezone(timedelta(hours=-3)), now, force_tz=True)  # 23:50-3 = 02:50 UTC, 00:04-3 = 03:04 UTC
     assert [x.at.astimezone(timezone.utc).hour for x in s] == [2, 3]
     assert all(now - timedelta(days=1) < x.at <= now for x in s)
+
+
+def test_clock_offset_from_ticks():
+    import time as _t
+
+    import bot
+    b = bot.Bot(bot.DEFAULTS | {"profile": "t"})
+    b.clock_sample(_t.time() - 5.85)  # PC 5.7s ahead + 0.15s latency
+    assert abs(bot.CLOCK_OFFSET - 5.7) < 0.05 and abs(bot.now() - (_t.time() - 5.7)) < 0.05
+    b.clock_gaps.clear()
+    b.clock_sample(_t.time() - 0.2)  # synced clock: latency noise is ignored
+    assert bot.CLOCK_OFFSET == 0.0

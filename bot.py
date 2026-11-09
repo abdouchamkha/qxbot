@@ -321,6 +321,7 @@ class Bot:
         self.pending_opened: dict[str, asyncio.Future] = {}  # ticket -> open result
         self.limit_said = False
         self.clock, self.clock_ok = "", None  # last clock check, for the GUI
+        self.clock_gaps: deque[tuple[float, float]] = deque(maxlen=2000)  # (received, received - Quotex stamp)
 
     @property
     def ping(self) -> float:
@@ -409,13 +410,28 @@ class Bot:
             print(self.clock)
             return
         gap = min(gaps[1:])  # first value is a stale tick
-        self.clock_ok = -0.1 <= gap <= 1.5
-        if not self.clock_ok:
-            self.clock = (f"WARNING: this PC clock looks {'behind' if gap < 0 else 'ahead'} of Quotex by about {abs(gap):.1f}s. "
-                          "Sync it (Windows: Settings > Time > Sync now; WSL: sudo hwclock -s) or entries will be off.")
+        self.clock_ok = True
+        if abs(CLOCK_OFFSET) >= 0.3:
+            self.clock = (f"This PC clock is {abs(CLOCK_OFFSET):.1f}s {'behind' if CLOCK_OFFSET < 0 else 'ahead of'} Quotex: "
+                          "trades are timed on Quotex's clock instead (syncing the PC clock is still better).")
         else:
             self.clock = f"Clock OK (ticks arrive {gap * 1000:.0f}ms after Quotex stamps them)."
         print(self.clock)
+
+    def clock_sample(self, server_ts: float) -> None:
+        """A price tick stamped `server_ts` by Quotex arrived now. The fastest tick of the last minute
+        arrived `one-way latency + clock error` late, so the clock error = that gap minus the latency."""
+        global CLOCK_OFFSET
+        t = time.time()
+        gap = t - server_ts
+        if abs(gap) > 60:  # a stale or wrong timestamp
+            return
+        self.clock_gaps.append((t, gap))
+        while self.clock_gaps[0][0] < t - 60:
+            self.clock_gaps.popleft()
+        error = min(g for _, g in self.clock_gaps) - 0.15  # 0.15s: measured one-way latency with a synced clock
+        # Small errors are latency noise: left at 0 (entries measured fine there); seconds are a wrong clock.
+        CLOCK_OFFSET = error if abs(error) >= 0.3 else 0.0
 
     def _hook(self, api) -> None:
         set_event = api.event_registry.set_event
@@ -441,6 +457,12 @@ class Bot:
         async def raw(msg):
             nonlocal failed
             text = msg.decode("utf-8", "ignore") if isinstance(msg, bytes) else str(msg)
+            if text[:3] in ('[["', '\x04[['):  # price ticks: [["EURUSD_otc", 1794.., 1.1, 0], ...]
+                try:
+                    for row in json.loads(text.lstrip("\x04")):
+                        self.clock_sample(float(row[1]))
+                except (ValueError, TypeError, IndexError):
+                    pass
             if text.startswith('451-["f_pending/opened"'):
                 failed = True
             elif failed:
@@ -513,10 +535,10 @@ class Bot:
             fut = asyncio.get_running_loop().create_future()
             self.orders[request_id] = self.orders[s.asset] = fut
             await api.send_websocket_request(f'42["orders/open",{json.dumps(payload)}]')
-            sent = time.time()
+            sent = now()
         try:
             data = await asyncio.wait_for(fut, 10)
-            ping = (time.time() - sent) * 1000
+            ping = (now() - sent) * 1000
             self.pings.append(ping / 1000)
         except asyncio.TimeoutError:
             print(f"  {s.asset} order not confirmed (asset closed or amount invalid?)")
@@ -553,7 +575,7 @@ class Bot:
             # the order then lands on that price (the candle's open) before the next one comes.
             if median_gap(self.broker.api.realtime_price.get(s.asset, [])) < self.ping:
                 return True
-        while self.tick_time(s.asset) < at and time.time() < at + 1.5:
+        while self.tick_time(s.asset) < at and now() < at + 1.5:
             await asyncio.sleep(0.001)
         if not margin:
             return True
@@ -564,7 +586,7 @@ class Bot:
         target = candle_open - margin if s.direction == "call" else candle_open + margin
         deadline = at + s.duration / 2 - 1  # only enter in the first half of the candle
         while not safe_price(s.direction, self.price(s.asset), target):
-            if time.time() > deadline:
+            if now() > deadline:
                 print(f"  {s.asset} {s.direction.upper()} SKIPPED: price never reached safe entry "
                       f"{target:.6g} (candle open {candle_open}) in the first half of the candle")
                 return False
@@ -582,13 +604,13 @@ class Bot:
                    "openTime": datetime.fromtimestamp(at, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")}
         async with self.pending_lock:
             self.pending_reply = asyncio.get_running_loop().create_future()
-            sent = time.time()
+            sent = now()
             await self.broker.api.send_websocket_request(f'42["pending/create",{json.dumps(payload)}]')
             try:
                 reply = await asyncio.wait_for(self.pending_reply, 10)
             except asyncio.TimeoutError:
                 return {"error": "no reply to pending/create"}
-            self.pings.append(time.time() - sent)
+            self.pings.append(now() - sent)
         if "error" in reply:
             return reply
         ticket = str(reply.get("pending", {}).get("ticket"))
@@ -601,7 +623,7 @@ class Bot:
             print(f"  {s.asset} pending order cancelled: {reason}")
             return {"error": "cancelled", "cancelled": True}
         try:
-            data = await asyncio.wait_for(fut, at + 15 - time.time())
+            data = await asyncio.wait_for(fut, at + 15 - now())
         except asyncio.TimeoutError:
             return None
         finally:
@@ -617,7 +639,7 @@ class Bot:
         at, amount = s.at.timestamp(), self.cfg["amount"]
         signal = f"{s.at:%Y-%m-%d %H:%M} {s.asset} {s.direction}"
         use_pending = (self.cfg["pending"] == "y" and s.asset.endswith("_otc") and not self.cfg["safe_pips"]
-                       and at - time.time() > 70)
+                       and at - now() > 70)
         await sleep_until(at - (70 if use_pending else 15))
         if not await self.ensure_connected():
             print(f"  {s.at:%H:%M} {s.asset} skipped: not connected")
@@ -756,6 +778,14 @@ class Bot:
         return [r for r in read_trades() if r["profile"] == self.cfg["profile"] and r["account"] == self.cfg["account"]]
 
 
+CLOCK_OFFSET = 0.0  # this PC's clock minus Quotex's, seconds (Bot.clock_sample)
+
+
+def now() -> float:
+    """Quotex time (unix s): every entry and gale is timed on it, not on this PC's clock."""
+    return time.time() - CLOCK_OFFSET
+
+
 TASKS: set[asyncio.Task] = set()  # asyncio keeps only weak refs to tasks
 
 
@@ -774,9 +804,9 @@ def spawn(coro, what: str) -> asyncio.Task:
 
 async def sleep_until(t: float) -> None:
     """Coarse sleep, then a 1ms-step finish for accuracy."""
-    while (left := t - time.time()) > 0.05:
+    while (left := t - now()) > 0.05:
         await asyncio.sleep(left - 0.05)
-    while time.time() < t:
+    while now() < t:
         await asyncio.sleep(0.001)
 
 

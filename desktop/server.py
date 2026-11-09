@@ -11,6 +11,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+import bot as qx
 
 WEB = Path(__file__).parent / "web"
 
@@ -99,7 +100,7 @@ def make_server(engine, app, port: int, token: str) -> ThreadingHTTPServer:
                     state = json.dumps(engine.snapshot())
                     if state != last or time.time() - quiet > 10:  # resend now and then: detects a closed window
                         last, quiet = state, time.time()
-                        out += f"event: state\ndata: {json.dumps(json.loads(state) | {'now': time.time()})}\n\n"
+                        out += f"event: state\ndata: {json.dumps(json.loads(state) | {'now': qx.now()})}\n\n"
                     if out:
                         self.wfile.write(out.encode())
                         self.wfile.flush()
